@@ -1,0 +1,6 @@
+/dataset/
+/patches/
+/weights/
+/.idea/
+remote_interpreter
+train_lama.sh
