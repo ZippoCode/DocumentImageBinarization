@@ -61,7 +61,7 @@ def train(args):
                     trainer.wandb.log({
                         'iter': i,
                         'epoch': trainer.epoch,
-                        'train_loss': train_loss,
+                        'train_loss': loss.item(),
                         'timeperepoch': predicted_time,
                         "images": wandb.Image(cv2.hconcat([train_img, pred_img, gt_img]), caption="Top: Example")
                     })
@@ -70,31 +70,6 @@ def train(args):
 
     except KeyboardInterrupt:
         logging.info("Keyboard Interrupt. Stop training!")
-
-
-def beta_validate(args):
-    trainer = LaMaTrainingModule(args.train_data_path, args.valid_data_path, args.input_channels, args.output_channels,
-                                 args.batch_size, args.epochs)
-    if torch.cuda.is_available():
-        trainer.model.cuda()
-
-    trainer.resume(args.path_checkpoint)
-
-    for i, (img, gt_img) in enumerate(trainer.valid_data_loader):
-        inputs = img.to(device)
-        outputs = gt_img.to(device)
-        predictions = trainer.model(inputs)
-
-        # Build image
-        train_img = np.swapaxes(inputs[0].cpu().detach().numpy(), 2, 0)
-        pred_img = np.swapaxes(predictions[0].cpu().detach().numpy(), 2, 0)
-        pred_img = cv2.cvtColor(pred_img, cv2.COLOR_GRAY2RGB)
-        gt_img = np.swapaxes(outputs[0].cpu().detach().numpy(), 2, 0)
-        gt_img = cv2.cvtColor(gt_img, cv2.COLOR_GRAY2RGB)
-
-        trainer.wandb.log({
-            "images": wandb.Image(cv2.hconcat([train_img, pred_img, gt_img]), caption="Top: Example")
-        })
 
 
 if __name__ == '__main__':
@@ -108,4 +83,4 @@ if __name__ == '__main__':
     parser.add_argument('--path_checkpoint', type=str, default='weights/')
 
     args = parser.parse_args()
-    beta_validate(args)
+    train(args)

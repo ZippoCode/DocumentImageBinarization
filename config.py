@@ -4,7 +4,7 @@ path_ground_truth = 'dataset/original/'
 path_destination = 'patches/'
 
 validation_dataset = "2016"
-testing_dataset = "2015"
+testing_dataset = "2018"
 patch_size = 256 + 128
 patch_size_valid = 256
 overlap_size = patch_size // 2

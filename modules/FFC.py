@@ -1,8 +1,7 @@
-from typing import TypedDict
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing_extensions import TypedDict
 
 from modules.base import get_activation
 from modules.spatial_transform import LearnableSpatialTransformWrapper
@@ -358,16 +357,3 @@ class LaMa(nn.Module):
 
     def forward(self, input):
         return self.model(input)
-
-
-if __name__ == '__main__':
-    Arguments = TypedDict('Arguments', {'ratio_gin': float, 'ratio_gout': float})
-    init_conv_kwargs: Arguments = {'ratio_gin': 0, 'ratio_gout': 0}
-    down_sample_conv_kwargs: Arguments = {'ratio_gin': 0, 'ratio_gout': 0}
-    resnet_conv_kwargs: Arguments = {'ratio_gin': 0.75, 'ratio_gout': 0.75}
-
-    lama = LaMa(input_nc=3, output_nc=1, init_conv_kwargs=init_conv_kwargs,
-                downsample_conv_kwargs=down_sample_conv_kwargs, resnet_conv_kwargs=resnet_conv_kwargs)
-    x = torch.rand((10, 3, 256, 256))
-    out = lama(x)
-    print(out.shape)

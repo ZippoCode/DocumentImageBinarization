@@ -2,5 +2,7 @@
 /patches/
 /weights/
 /.idea/
+/__pycache__/
+*.pyc
 remote_interpreter
 train_lama.sh

@@ -6,7 +6,7 @@ import torch.utils.data
 from typing_extensions import TypedDict
 import wandb
 
-from dataloader import HandwrittenTextImageDataset, ImageDataset
+from dataloader import HandwrittenTextImageDataset
 from modules.FFC import LaMa
 
 
@@ -64,8 +64,8 @@ class LaMaTrainingModule:
 
     def _get_dataloader(self):
         train_dataset = HandwrittenTextImageDataset(self.train_data_path, self.train_data_path + '_gt')
-        self.train_data_loader = torch.utils.data.DataLoader(train_dataset, collate_fn=train_dataset.collate_fn,
-                                                             batch_size=self.batch_size, shuffle=True, num_workers=0,
+        self.train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True,
+                                                             num_workers=0,
                                                              pin_memory=True)
-        valid_dataset = ImageDataset(self.valid_data_path, self.valid_data_path + '_gt')
+        valid_dataset = HandwrittenTextImageDataset(self.valid_data_path, self.valid_data_path + '_gt')
         self.valid_data_loader = torch.utils.data.DataLoader(valid_dataset)
