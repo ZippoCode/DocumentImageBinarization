@@ -1,9 +1,7 @@
 import torch
-from typing_extensions import TypedDict
 
 from dataloader import HandwrittenTextImageDataset
-from modules.FFC import LaMa
-import numpy as np
+from trainer.LaMaTrainer import LaMaTrainingModule
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -25,9 +23,36 @@ def test_dataloader():
     print("Test size: ", len(test_loader))
 
 
+def test_validation():
+    train_data_path = 'patches/train'
+    valid_data_path = 'patches/valid'
+    input_channels = 3
+    output_channels = 1
+    train_batch_size = 8
+    valid_batch_size = 8
+    train_split_size = 256
+    valid_split_size = 256
+    workers = 0
+    debug = True
+    epochs = 150
+    path_checkpoint = 'weights/'
+
+    trainer = LaMaTrainingModule(train_data_path=train_data_path, valid_data_path=valid_data_path,
+                                 input_channels=input_channels, output_channels=output_channels,
+                                 train_batch_size=train_batch_size, valid_batch_size=valid_batch_size,
+                                 train_split_size=train_split_size, valid_split_size=valid_split_size,
+                                 workers=workers, epochs=epochs, debug=debug, device=device)
+    trainer.resume(path_checkpoint)
+    trainer.model.eval()
+    with torch.no_grad():
+        psnr, loss = trainer.validation()
+    print(psnr)
+
+
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    test_dataloader()
+    # test_dataloader()
+    test_validation()
 
     # Arguments = TypedDict('Arguments', {'ratio_gin': float, 'ratio_gout': float})
     # init_conv_kwargs: Arguments = {'ratio_gin': 0, 'ratio_gout': 0}

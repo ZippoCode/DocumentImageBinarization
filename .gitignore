@@ -2,6 +2,7 @@
 /patches/
 /weights/
 /.idea/
+/jobs/
 /__pycache__/
 *.pyc
 remote_interpreter

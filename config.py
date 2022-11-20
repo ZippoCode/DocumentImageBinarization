@@ -1,6 +1,6 @@
 # PATH
 path_dataset = 'dataset/original/'
-path_ground_truth = 'dataset/original/'
+path_ground_truth = 'dataset/ground_truth/'
 path_destination = 'patches/'
 
 validation_dataset = "2016"

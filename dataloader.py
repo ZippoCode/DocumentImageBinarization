@@ -59,7 +59,7 @@ class HandwrittenTextImageDataset(Dataset):
             sample = functional.to_tensor(sample)
             gt_sample = functional.to_tensor(gt_sample)
 
-            sample = functional.normalize(sample, mean=[0.485, 0.456, 0.406], std=[0.485, 0.456, 0.406])
+            sample = functional.normalize(sample, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
         else:
             sample = self.transform(sample)
