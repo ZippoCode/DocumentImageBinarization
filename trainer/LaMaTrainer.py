@@ -6,11 +6,12 @@ import torch
 import torch.optim as optim
 import torch.utils.data
 import wandb
-from torchvision import transforms
 from typing_extensions import TypedDict
 
 from dataloader import HandwrittenTextImageDataset
 from modules.FFC import LaMa
+from trainer.CustomTransforms import create_train_transform, create_valid_transform
+from utils.htr_logging import get_logger
 
 
 class LaMaTrainingModule:
@@ -25,15 +26,16 @@ class LaMaTrainingModule:
         self.train_split_size = train_split_size
         self.valid_split_size = valid_split_size
 
+        self.train_dataset = None
+        self.valid_dataset = None
         self.train_data_loader = None
         self.valid_data_loader = None
-        self.epochs = epochs
+        self.optimizer = None
+
         self.device = device
         self.workers = workers
 
         self.debug = debug
-
-        self._get_dataloader()
 
         # TO IMPROVE
         Arguments = TypedDict('Arguments', {'ratio_gin': float, 'ratio_gout': float})  # REMOVE
@@ -45,11 +47,9 @@ class LaMaTrainingModule:
                           resnet_conv_kwargs=resnet_conv_kwargs)
         self.model.to(self.device)
 
-        # Optimizer
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=0.001)
-
         # Training
         self.epoch = 1
+        self.num_epochs = epochs
 
         # Criterion
         self.criterion = torch.nn.MSELoss().to(self.device)
@@ -59,7 +59,7 @@ class LaMaTrainingModule:
             wandb.init(project="test-project", entity="fomo_thesis", name="test_train_lama")
             wandb.config = {
                 "learning_rage": 1.5e-4,
-                "epochs": self.epochs,
+                "epochs": self.num_epochs,
                 "batch_size": self.train_batch_size
             }
             wandb.watch(self.model, log="all")
@@ -69,8 +69,20 @@ class LaMaTrainingModule:
         self.best_epoch = 0
         self.best_psnr = 0
 
+        # Logging
+        self.logger = get_logger(LaMaTrainingModule.__name__, debug)
+
+        self._get_dataloader()
+        self._create_optimizer()
+
     def resume(self, folder):
-        checkpoint = torch.load(folder + "last_train.pth", map_location=None)
+        checkpoints_path = folder + "last_train.pth"
+        self.logger.info(f"Loading pretrained model from {checkpoints_path}")
+
+        if not os.path.exists(path=checkpoints_path):
+            self.logger.error(f"[ERROR] Checkpoints {checkpoints_path} not found.")
+
+        checkpoint = torch.load(checkpoints_path, map_location=None)
         self.model.load_state_dict(checkpoint['model'], strict=True)
         self.epoch = checkpoint['epoch']
         self.best_psnr = checkpoint['best_psnr']
@@ -83,7 +95,9 @@ class LaMaTrainingModule:
             'epoch': self.epoch,
             'best_psnr': self.best_psnr
         }
+        os.makedirs(folder, exist_ok=True)
         torch.save(checkpoint, path)
+        self.logger.info(f"Stored checkpoints {path}")
 
     def validation(self, threshold=0.5):
         total_psnr = 0.0
@@ -110,11 +124,22 @@ class LaMaTrainingModule:
         return avg_psnr, avg_loss
 
     def _get_dataloader(self):
-        train_dataset = HandwrittenTextImageDataset(self.train_data_path, self.train_data_path + '_gt')
-        self.train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=self.train_batch_size,
+        # Train
+        train_transform = create_train_transform(patch_size=self.train_split_size, angle=15.2)
+        self.train_dataset = HandwrittenTextImageDataset(self.train_data_path, self.train_data_path + '_gt',
+                                                         transform=train_transform)
+        self.train_data_loader = torch.utils.data.DataLoader(self.train_dataset, batch_size=self.train_batch_size,
                                                              shuffle=True, num_workers=self.workers, pin_memory=True)
-        transform = transforms.Compose([transforms.CenterCrop(size=self.valid_split_size), transforms.ToTensor()])
-        valid_dataset = HandwrittenTextImageDataset(self.valid_data_path, self.valid_data_path + '_gt',
-                                                    transform=transform)
-        self.valid_data_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=self.valid_batch_size,
+        # Valid
+        transform = create_valid_transform(patch_size=self.valid_split_size)
+        self.valid_dataset = HandwrittenTextImageDataset(self.valid_data_path, self.valid_data_path + '_gt',
+                                                         transform=transform)
+        self.valid_data_loader = torch.utils.data.DataLoader(self.valid_dataset, batch_size=self.valid_batch_size,
                                                              num_workers=self.workers, pin_memory=True)
+
+        self.logger.info(f"Training set has {len(self.train_dataset)} instances")
+        self.logger.info(f"Validation set has {len(self.valid_dataset)} instances")
+
+    def _create_optimizer(self):
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=1.5e-4, betas=(0.9, 0.95),
+                                     eps=1e-08, weight_decay=0.05, amsgrad=False)

@@ -1,17 +1,24 @@
 import argparse
-import logging
+import sys
 import time
 
 import numpy as np
 import torch
 import torchvision.transforms as transforms
-from PIL import Image
-import torchvision.transforms.functional as functional
 
 from trainer.LaMaTrainer import LaMaTrainingModule
+from utils.htr_logging import get_logger
+
+debug = False
+get_trace = getattr(sys, 'gettrace', None)
+if get_trace():
+    print('Program runs in Debug mode')
+    debug = True
+
+logger = get_logger('main', debug)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
+logger.info(f"Using {device} device")
 
 
 def train(args):
@@ -20,7 +27,10 @@ def train(args):
                                  input_channels=args.input_channels, output_channels=args.output_channels,
                                  train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size,
                                  train_split_size=args.train_split_size, valid_split_size=args.valid_split_size,
-                                 workers=args.workers, epochs=args.epochs, debug=args.debug, device=device)
+                                 workers=args.workers, epochs=args.epochs, debug=debug, device=device)
+    if torch.cuda.is_available():
+        trainer.model.cuda()
+
     criterion = torch.nn.MSELoss()
 
     # Denormalize
@@ -28,21 +38,16 @@ def train(args):
         [transforms.Normalize(mean=[0., 0., 0.], std=[1 / 0.229, 1 / 0.224, 1 / 0.225]),
          transforms.Normalize(mean=[-0.485, -0.456, -0.406], std=[1., 1., 1.])])
 
-    if torch.cuda.is_available():
-        trainer.model.cuda()
-
     try:
-
         for epoch in range(1, args.epochs):
+            logger.info("Start training")
+            logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}\n ----------------------------")
 
             trainer.model.train()
             train_loss = 0.0
 
             for i, (train_in, train_out) in enumerate(trainer.train_data_loader):
-                elapsed_time = time.time() - start_time
-
-                inputs = train_in.to(device)
-                outputs = train_out.to(device)
+                inputs, outputs = train_in.to(device), train_out.to(device)
 
                 trainer.optimizer.zero_grad()
 
@@ -70,8 +75,12 @@ def train(args):
                     })
 
                 # Logging
-                logging.info(f'i: {i} - epoch: {epoch}')
-                logging.info(f'Loss: {train_loss:0.6f} time {elapsed_time:0.1f}, {predicted_time:0.1f}')
+                with torch.no_grad():
+                    if i % 10 == 0:
+                        elapsed_time = time.time() - start_time
+                        logger.info(
+                            f'Train Loss: {loss.item():0.6f} [{i * len(inputs)} / {len(trainer.train_data_loader)}]')
+                        logger.info(f'Time {elapsed_time:0.1f}, {predicted_time:0.1f}')
 
             avg_loss = train_loss / len(trainer.train_data_loader)
 
@@ -84,6 +93,9 @@ def train(args):
                     trainer.save_checkpoint(args.path_checkpoint)
                     trainer.best_psnr = psnr
 
+            logger.info(f'Current Peak Signal To Noise: {psnr:0.6f} - Best: {trainer.best_psnr} ')
+            logger.info(f'Valid Loss: {valid_loss}')
+
             if not trainer.debug:
                 trainer.wandb.log({
                     'epoch': trainer.epoch,
@@ -95,7 +107,7 @@ def train(args):
 
 
     except KeyboardInterrupt:
-        logging.info("Keyboard Interrupt. Stop training!")
+        logger.error("Keyboard Interrupt. Stop training!")
 
 
 if __name__ == '__main__':
@@ -111,7 +123,6 @@ if __name__ == '__main__':
     parser.add_argument('--workers', default=4, type=int)
     parser.add_argument('--epochs', type=int, default=150)
     parser.add_argument('--path_checkpoint', type=str, default='weights/')
-    parser.add_argument('--debug', type=bool, default=False)
 
     args = parser.parse_args()
     train(args)
