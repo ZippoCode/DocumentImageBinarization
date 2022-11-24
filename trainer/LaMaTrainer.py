@@ -5,20 +5,30 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.utils.data
+import torchvision.transforms.functional as functional
 import wandb
 from typing_extensions import TypedDict
 
 from dataloader import HandwrittenTextImageDataset
 from modules.FFC import LaMa
 from trainer.CustomTransforms import create_train_transform, create_valid_transform
+from utils.WandbLog import WandbLog
 from utils.htr_logging import get_logger
+
+
+class LMSELoss(torch.nn.MSELoss):
+    def forward(self, input, target):
+        mse = super().forward(input, target)
+        mse = torch.tensor(max(mse, 1e-10))
+        return torch.log10(mse)
 
 
 class LaMaTrainingModule:
 
     def __init__(self, train_data_path: str, valid_data_path: str, input_channels: int, output_channels: int,
                  train_batch_size: int, valid_batch_size: int, train_split_size: int, valid_split_size: int,
-                 epochs: int, workers: int, device=None, debug=False):
+                 epochs: int, workers: int, learning_rate: int, device=None, debug=False, **kwargs):
+
         self.train_data_path = train_data_path
         self.valid_data_path = valid_data_path
         self.train_batch_size = train_batch_size
@@ -31,11 +41,14 @@ class LaMaTrainingModule:
         self.train_data_loader = None
         self.valid_data_loader = None
         self.optimizer = None
+        self.wandb = None
 
         self.device = device
         self.workers = workers
+        self.learning_rate = learning_rate
 
         self.debug = debug
+        self.experiment_name = "With Simple Transforms and MSE Loss"
 
         # TO IMPROVE
         Arguments = TypedDict('Arguments', {'ratio_gin': float, 'ratio_gout': float})  # REMOVE
@@ -52,18 +65,7 @@ class LaMaTrainingModule:
         self.num_epochs = epochs
 
         # Criterion
-        self.criterion = torch.nn.MSELoss().to(self.device)
-
-        # Configuration Weights & Bias
-        if not debug:
-            wandb.init(project="test-project", entity="fomo_thesis", name="test_train_lama")
-            wandb.config = {
-                "learning_rage": 1.5e-4,
-                "epochs": self.num_epochs,
-                "batch_size": self.train_batch_size
-            }
-            wandb.watch(self.model, log="all")
-            self.wandb = wandb
+        self.criterion = LMSELoss().to(self.device)
 
         # Validation
         self.best_epoch = 0
@@ -74,6 +76,9 @@ class LaMaTrainingModule:
 
         self._get_dataloader()
         self._create_optimizer()
+
+        if not self.debug:  # Configuration Weights & Bias
+            self._configure_wandb()
 
     def resume(self, folder):
         checkpoints_path = folder + "last_train.pth"
@@ -118,10 +123,31 @@ class LaMaTrainingModule:
             psnr = 100 if mse == 0 else (20 * math.log10(1.0 / math.sqrt(mse)))
             total_psnr += psnr
 
+            if self.wandb:
+                self.wandb.on_log_images(valid, pred, gt_valid)
+
         avg_psnr = total_psnr / len(self.valid_data_loader)
         avg_loss = valid_loss / len(self.valid_data_loader)
 
+        if self.wandb:  # Logs Valid Parameters
+            logs = {
+                'valid_psnr': total_psnr,
+                'valid_avg_loss': avg_loss,
+                'valid_loss': valid_loss,
+            }
+            self.wandb.on_log(logs)
+
         return avg_psnr, avg_loss
+
+    def _configure_wandb(self):
+        params = {
+            "experiment_name": self.experiment_name,
+            "learning_rage": self.learning_rate,
+            "epochs": self.num_epochs,
+            "batch_size": self.train_batch_size
+        }
+        self.wandb = WandbLog()
+        self.wandb.setup(model=self.model, **params)
 
     def _get_dataloader(self):
         # Train
@@ -141,5 +167,5 @@ class LaMaTrainingModule:
         self.logger.info(f"Validation set has {len(self.valid_dataset)} instances")
 
     def _create_optimizer(self):
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=1.5e-4, betas=(0.9, 0.95),
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.95),
                                      eps=1e-08, weight_decay=0.05, amsgrad=False)

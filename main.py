@@ -52,9 +52,10 @@ def test_validation():
                                  input_channels=input_channels, output_channels=output_channels,
                                  train_batch_size=train_batch_size, valid_batch_size=valid_batch_size,
                                  train_split_size=train_split_size, valid_split_size=valid_split_size,
-                                 workers=workers, epochs=epochs, debug=debug, device=device)
-    trainer.resume(path_checkpoint)
+                                 workers=workers, epochs=epochs, debug=debug, device=device, learning_rate=1)
+    # trainer.resume(path_checkpoint)
     trainer.model.eval()
+
     with torch.no_grad():
         psnr, loss = trainer.validation()
     print(psnr)
@@ -62,5 +63,5 @@ def test_validation():
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    test_dataloader()
-    # test_validation()
+    # test_dataloader()
+    test_validation()
