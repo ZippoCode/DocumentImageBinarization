@@ -6,16 +6,19 @@ import torchvision.transforms.functional as functional
 
 def rewrite_logs(dictionary: dict):
     new_dictionary = {}
-    eval_prefix, test_prefix = 'eval_', 'test_'
-    eval_prefix_len = len(eval_prefix)
+    train_prefix, valid_prefix, test_prefix = 'train_', 'valid_', 'test_'
+    train_prefix_len = len(train_prefix)
+    valid_prefix_len = len(valid_prefix)
     test_prefix_len = len(test_prefix)
     for key, value in dictionary.items():
-        if key.startswith(eval_prefix):
-            new_dictionary["eval/" + key[eval_prefix_len:]] = value
+        if key.startswith(train_prefix):
+            new_dictionary["train/" + key[train_prefix_len:]] = value
+        elif key.startswith(valid_prefix):
+            new_dictionary["valid/" + key[valid_prefix_len:]] = value
         elif key.startswith(test_prefix):
             new_dictionary["test/" + key[test_prefix_len:]] = value
         else:
-            new_dictionary["train/" + key] = value
+            new_dictionary[key] = value
     return new_dictionary
 
 

@@ -109,8 +109,11 @@ def create_train_transform(patch_size: int, angle: float):
 
 
 def create_valid_transform(patch_size: int):
+    # transform = transforms.Compose([
+    #     CenterCrop(patch_size),
+    #     ToTensor()
+    # ])
     transform = transforms.Compose([
-        CenterCrop(patch_size),
         ToTensor()
     ])
     return transform
