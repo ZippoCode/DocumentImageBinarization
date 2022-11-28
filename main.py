@@ -1,12 +1,31 @@
-import sys
-
 import torch
 
 from dataloader import HandwrittenTextImageDataset
+from train import LMSELoss
 from trainer.CustomTransforms import create_train_transform, create_valid_transform
 from trainer.LaMaTrainer import LaMaTrainingModule
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+train_data_path = 'patches/train'
+valid_data_path = 'patches/valid'
+input_channels = 3
+output_channels = 1
+train_batch_size = 8
+valid_batch_size = 8
+train_split_size = 256
+valid_split_size = 512
+workers = 0
+debug = True
+epochs = 150
+path_checkpoint = 'weights/all_transform_v_size_512/'
+criterion = LMSELoss().to(device)
+
+trainer = LaMaTrainingModule(train_data_path=train_data_path, valid_data_path=valid_data_path,
+                             input_channels=input_channels, output_channels=output_channels,
+                             train_batch_size=train_batch_size, valid_batch_size=valid_batch_size,
+                             train_split_size=train_split_size, valid_split_size=valid_split_size,
+                             workers=workers, epochs=epochs, debug=debug, device=device, learning_rate=1,
+                             criterion=criterion)
 
 
 def test_dataloader():
@@ -35,33 +54,19 @@ def test_dataloader():
 
 
 def test_validation():
-    train_data_path = 'patches/train'
-    valid_data_path = 'patches/valid'
-    input_channels = 3
-    output_channels = 1
-    train_batch_size = 8
-    valid_batch_size = 8
-    train_split_size = 256
-    valid_split_size = 256
-    workers = 0
-    debug = True
-    epochs = 150
-    path_checkpoint = 'weights/'
-
-    trainer = LaMaTrainingModule(train_data_path=train_data_path, valid_data_path=valid_data_path,
-                                 input_channels=input_channels, output_channels=output_channels,
-                                 train_batch_size=train_batch_size, valid_batch_size=valid_batch_size,
-                                 train_split_size=train_split_size, valid_split_size=valid_split_size,
-                                 workers=workers, epochs=epochs, debug=debug, device=device, learning_rate=1)
-    # trainer.resume(path_checkpoint)
+    trainer.load_checkpoints(path_checkpoint)
     trainer.model.eval()
 
     with torch.no_grad():
-        psnr, loss = trainer.validation()
-    print(psnr)
+        trainer.validation()
 
 
-# Press the green button in the gutter to run the script.
+def test_save_and_load():
+    trainer.save_checkpoints('weights/')
+    trainer.load_checkpoints('weights/')
+
+
 if __name__ == '__main__':
     # test_dataloader()
     test_validation()
+    # test_save_and_load(trainer)

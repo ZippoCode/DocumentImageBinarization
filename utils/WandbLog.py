@@ -38,8 +38,9 @@ class WandbLog(object):
         # Configuration
         if self._wandb.run is None:
             name = kwargs['experiment_name'] if kwargs['experiment_name'] else "train_lama_htr"
-            self._wandb.init(project=self._project, entity=self._entity, name=name)
+            self._wandb.init(project=self._project, entity=self._entity, name=name, config={**kwargs})
         self._wandb.config = {**kwargs}
+        self._wandb.config.update()
         self._wandb.watch(model, log="all")
 
     def on_log(self, logs=None):

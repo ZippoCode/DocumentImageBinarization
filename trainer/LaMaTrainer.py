@@ -11,6 +11,7 @@ from dataloader import HandwrittenTextImageDataset
 from modules.FFC import LaMa
 from trainer.CustomTransforms import create_train_transform, create_valid_transform
 from utils.htr_logging import get_logger
+from torchmetrics import PeakSignalNoiseRatio
 
 
 def calculate_psnr(predicted: torch.Tensor, ground_truth: torch.Tensor, threshold=0.5):
@@ -61,13 +62,14 @@ class LaMaTrainingModule:
         self.model.to(self.device)
 
         # Training
-        self.epoch = 1
+        self.epoch = 0
         self.num_epochs = epochs
 
         # Criterion
         self.criterion = criterion
 
         # Validation
+        self.psnr_metric = PeakSignalNoiseRatio().to(device=device)
         self.best_epoch = 0
         self.best_psnr = 0
 
@@ -78,8 +80,8 @@ class LaMaTrainingModule:
         self._make_dataloaders()
         self._create_optimizer()
 
-    def resume(self, folder):
-        checkpoints_path = folder + "last_train.pth"
+    def load_checkpoints(self, folder: str):
+        checkpoints_path = folder + "best_psnr.pth"
         self.logger.info(f"Loading pretrained model from {checkpoints_path}")
 
         if not os.path.exists(path=checkpoints_path):
@@ -87,24 +89,30 @@ class LaMaTrainingModule:
 
         checkpoint = torch.load(checkpoints_path, map_location=None)
         self.model.load_state_dict(checkpoint['model'], strict=True)
+        self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.epoch = checkpoint['epoch']
         self.best_psnr = checkpoint['best_psnr']
+        self.criterion = checkpoint['criterion']
 
-    def save_checkpoint(self, folder: str):
-        path = folder + "last_train.pth"
+    def save_checkpoints(self, folder: str):
         os.makedirs(folder, exist_ok=True)
         checkpoint = {
             'model': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
             'epoch': self.epoch,
-            'best_psnr': self.best_psnr
+            'best_psnr': self.best_psnr,
+            'criterion': self.criterion
         }
-        os.makedirs(folder, exist_ok=True)
+
+        path = folder + "best_psnr.pth"
         torch.save(checkpoint, path)
         self.logger.info(f"Stored checkpoints {path}")
 
     def validation(self):
         total_psnr = 0.0
         valid_loss = 0.0
+        count_images = 0
+
         for valid, gt_valid in self.valid_data_loader:
             valid = valid.to(self.device)
             gt_valid = gt_valid.to(self.device)
@@ -113,21 +121,26 @@ class LaMaTrainingModule:
             loss = self.criterion(pred, gt_valid)
             valid_loss += loss.item()
 
-            psnr = calculate_psnr(predicted=pred, ground_truth=gt_valid)
-            total_psnr += psnr
+            count_images += len(valid)
+            for b in range(len(valid)):
+                pred_img = pred[b]
+                target_img = gt_valid[b]
+                psnr = self.psnr_metric(pred_img, target_img)
+                total_psnr += psnr
 
             if self.wandb:
                 self.wandb.on_log_images(valid, pred, gt_valid)
 
-        avg_psnr = total_psnr / len(self.valid_data_loader)
-        avg_loss = valid_loss / len(self.valid_data_loader)
-        self.logger(f"Valid Average Loss: {avg_loss} - Valid average PSNR: {avg_psnr}")
+        avg_psnr = total_psnr / count_images
+        avg_loss = valid_loss / count_images
+
+        self.logger.info(f"Total Loss: {valid_loss} - Total PSNR: {total_psnr}")
+        self.logger.info(f"Valid Average Loss: {avg_loss} - Valid average PSNR: {avg_psnr}")
 
         if self.wandb:  # Logs Valid Parameters
             logs = {
-                'valid_total_psnr': total_psnr,
+                'valid_avg_psnr': avg_psnr,
                 'valid_avg_loss': avg_loss,
-                'valid_loss': valid_loss,
             }
             self.wandb.on_log(logs)
 
@@ -135,8 +148,14 @@ class LaMaTrainingModule:
 
     def _make_datasets(self):
         train_transform = create_train_transform(patch_size=self.train_split_size, angle=15.2)
-        self.train_dataset = HandwrittenTextImageDataset(self.train_data_path, self.train_data_path + '_gt',
+        train_data_path = self.train_data_path
+        train_data_gt_path = self.train_data_path + '_gt'
+
+        self.train_dataset = HandwrittenTextImageDataset(train_data_gt_path, train_data_gt_path,
                                                          transform=train_transform)
+        self.logger.info(f"Train path: \"{train_data_path}\" - Train ground truth path: \"{train_data_gt_path}\"")
+
+        # Validation
         valid_transform = create_valid_transform(patch_size=self.valid_split_size)
         valid_path = self.valid_data_path
         valid_gt_path = self.valid_data_path + '_gt'
@@ -147,9 +166,9 @@ class LaMaTrainingModule:
             valid_path = valid_path + '/full'
             valid_gt_path = valid_gt_path + '/full'
 
-        print(valid_path, valid_gt_path)
-        self.valid_dataset = HandwrittenTextImageDataset(valid_path, valid_gt_path,
-                                                         transform=valid_transform)
+        self.logger.info(f"Validation path: \"{valid_path}\" - Validation ground truth path: \"{valid_gt_path}\"")
+
+        self.valid_dataset = HandwrittenTextImageDataset(valid_path, valid_gt_path, transform=valid_transform)
 
     def _make_dataloaders(self):
         self.train_data_loader = torch.utils.data.DataLoader(self.train_dataset, batch_size=self.train_batch_size,

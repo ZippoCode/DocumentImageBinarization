@@ -46,16 +46,19 @@ def train(args):
                                  workers=args.workers, epochs=args.num_epochs, learning_rate=args.learning_rate,
                                  debug=debug, device=device, criterion=criterion, wandb=wandb_log)
 
-    # Setup Wandb
     # Make experiment name
     experiment_name = args.experiment_name + "_v_size_" + str(args.valid_split_size)
     experiment_name += "_lr_" + str(args.learning_rate)
-    if wandb_log:
+    path_checkpoints = args.path_checkpoint + args.experiment_name + "_v_size_" + str(args.valid_split_size) + '/'
+
+    if wandb_log:  # Setup Wandb
         params = {
             "experiment_name": experiment_name,
-            "learning_rage": args.learning_rate,
+            "learning_rate": args.learning_rate,
             "epochs": args.num_epochs,
-            "batch_size": args.train_batch_size
+            "train_batch_size": args.train_batch_size,
+            "valid_batch_size": args.valid_batch_size,
+            "architecture": "lama"
         }
         wandb_log.setup(model=trainer.model, **params)
 
@@ -64,6 +67,9 @@ def train(args):
 
     try:
         for epoch in range(1, args.num_epochs):
+
+            num_images = 0
+
             if args.train:
                 logger.info("Start training")
                 logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}\n ----------------------------")
@@ -87,6 +93,7 @@ def train(args):
                     trainer.optimizer.step()
 
                     train_loss += loss.item()
+                    num_images += len(inputs)
 
                     # trainer.model.eval()
                     with torch.no_grad():  # PSNR Train
@@ -98,18 +105,18 @@ def train(args):
                         elapsed_time = time.time() - start_time
                         size = i * len(inputs)
                         all_size = len(trainer.train_data_loader) * len(inputs)
-                        logger.info(f'Train Loss: {loss.item():0.6f} [{size} / {all_size}] - Epoch: {trainer.epoch}')
+                        logger.info(
+                            f'Train Loss: {loss.item():0.6f} [{size} / {all_size}] - Epoch: {trainer.epoch + 1}')
                         logger.info(f'Time {elapsed_time:0.1f}, {predicted_time:0.1f}')
                         logger.info(f"BATCH shape: {inputs.shape}")
 
-                avg_train_loss = train_loss / len(trainer.train_data_loader)
-                avg_train_psnr = train_psnr / len(trainer.train_data_loader)
+                avg_train_loss = train_loss / num_images
+                avg_train_psnr = train_psnr / num_images
 
                 if wandb_log:
                     logs = {
                         'train_avg_loss': avg_train_loss,
-                        'train_avg_psnr': avg_train_psnr,
-                        'train_total_psnr': train_psnr,
+                        'train_total_psnr': avg_train_psnr,
                     }
                     wandb_log.on_log(logs)
 
@@ -118,8 +125,8 @@ def train(args):
             with torch.no_grad():
                 psnr, valid_loss = trainer.validation()
 
-                if psnr > trainer.best_psnr and args.train:
-                    trainer.save_checkpoint(args.path_checkpoint)
+                if psnr > trainer.best_psnr:
+                    trainer.save_checkpoints(path_checkpoints)
                     trainer.best_psnr = psnr
 
             trainer.epoch += 1
@@ -143,12 +150,12 @@ if __name__ == '__main__':
     parser.add_argument('--train_data_path', type=str, default='patches/train')
     parser.add_argument('--valid_data_path', type=str, default='patches/valid')
     parser.add_argument('--train_batch_size', type=int, default=4)
-    parser.add_argument('--valid_batch_size', type=int, default=1)
+    parser.add_argument('--valid_batch_size', type=int, default=4)
     parser.add_argument('--train_split_size', type=int, default=256)
     parser.add_argument('--valid_split_size', type=int, default=512)
     parser.add_argument('--input_channels', type=int, default=3)
     parser.add_argument('--output_channels', type=int, default=1)
-    parser.add_argument('--workers', default=4, type=int)
+    parser.add_argument('--workers', default=1, type=int)
     parser.add_argument('--num_epochs', type=int, default=150)
     parser.add_argument('--path_checkpoint', type=str, default='weights/')
 
