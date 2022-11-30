@@ -1,8 +1,9 @@
 /dataset/
 /patches/
 /weights/
-/.idea/
+/results/
 /jobs/
+/.idea/
 /__pycache__/
 *.pyc
 remote_interpreter

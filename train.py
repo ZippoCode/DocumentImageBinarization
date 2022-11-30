@@ -31,25 +31,28 @@ class LMSELoss(torch.nn.MSELoss):
 def train(args):
     start_time = time.time()
 
-    # criterion = torch.nn.MSELoss().to(device)
-    criterion = LMSELoss().to(device)
+    if args.experiment_name == 'custom_loss':
+        criterion = LMSELoss().to(device)
+    else:
+        criterion = torch.nn.MSELoss().to(device)
 
     # Configure WandB
     wandb_log = None
     if not debug:
         wandb_log = WandbLog()
 
-    trainer = LaMaTrainingModule(train_data_path=args.train_data_path, valid_data_path=args.valid_data_path,
+    trainer = LaMaTrainingModule(train_data_path=args.train_data_path, train_gt_data_path=args.train_gt_data_path,
+                                 valid_data_path=args.valid_data_path, valid_gt_data_path=args.valid_gt_data_path,
                                  input_channels=args.input_channels, output_channels=args.output_channels,
                                  train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size,
                                  train_split_size=args.train_split_size, valid_split_size=args.valid_split_size,
                                  workers=args.workers, epochs=args.num_epochs, learning_rate=args.learning_rate,
-                                 debug=debug, device=device, criterion=criterion, wandb=wandb_log)
+                                 debug=debug, device=device, criterion=criterion, wandb_log=wandb_log,
+                                 experiment_name=args.experiment_name)
 
     # Make experiment name
-    experiment_name = args.experiment_name + "_v_size_" + str(args.valid_split_size)
-    experiment_name += "_lr_" + str(args.learning_rate)
-    path_checkpoints = args.path_checkpoint + args.experiment_name + "_v_size_" + str(args.valid_split_size) + '/'
+    experiment_name = args.experiment_name + "_lr_" + str(args.learning_rate)
+    path_checkpoints = args.path_checkpoint + args.experiment_name + '/'
 
     if wandb_log:  # Setup Wandb
         params = {
@@ -116,7 +119,7 @@ def train(args):
                 if wandb_log:
                     logs = {
                         'train_avg_loss': avg_train_loss,
-                        'train_total_psnr': avg_train_psnr,
+                        'train_avg_psnr': avg_train_psnr,
                     }
                     wandb_log.on_log(logs)
 
@@ -130,7 +133,8 @@ def train(args):
                     trainer.best_psnr = psnr
 
             trainer.epoch += 1
-            wandb_log.on_log({'epoch': trainer.epoch})
+            if wandb_log:
+                wandb_log.on_log({'epoch': trainer.epoch})
 
     except KeyboardInterrupt:
         logger.warning("Training interrupted by user")
@@ -148,9 +152,11 @@ if __name__ == '__main__':
 
     # Default values
     parser.add_argument('--train_data_path', type=str, default='patches/train')
-    parser.add_argument('--valid_data_path', type=str, default='patches/valid')
+    parser.add_argument('--train_gt_data_path', type=str, default='patches/train_gt')
+    parser.add_argument('--valid_data_path', type=str, default='patches/valid/full')
+    parser.add_argument('--valid_gt_data_path', type=str, default='patches/valid_gt/full')
     parser.add_argument('--train_batch_size', type=int, default=4)
-    parser.add_argument('--valid_batch_size', type=int, default=4)
+    parser.add_argument('--valid_batch_size', type=int, default=1)
     parser.add_argument('--train_split_size', type=int, default=256)
     parser.add_argument('--valid_split_size', type=int, default=512)
     parser.add_argument('--input_channels', type=int, default=3)

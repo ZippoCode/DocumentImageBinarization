@@ -1,7 +1,6 @@
 import torch
-import wandb
-
 import torchvision.transforms.functional as functional
+import wandb
 
 
 def rewrite_logs(dictionary: dict):
@@ -46,23 +45,3 @@ class WandbLog(object):
     def on_log(self, logs=None):
         logs = rewrite_logs(logs)
         self._wandb.log(logs)
-
-    def on_log_images(self, sample: torch.Tensor, predicted_sample: torch.Tensor, gt_sample: torch.Tensor):
-        num_batches = len(sample)
-
-        for b in range(num_batches):
-            valid_img = sample[b].detach()
-            pred_img = predicted_sample[b].detach()
-            gt_valid_img = gt_sample[b].detach()
-
-            valid_img = functional.to_pil_image(valid_img)
-            pred_img = functional.to_pil_image(pred_img)
-            gt_valid_img = functional.to_pil_image(gt_valid_img)
-
-            wandb_images = [wandb.Image(valid_img, caption='Sample'), wandb.Image(pred_img, caption='Predicted Sample'),
-                            wandb.Image(gt_valid_img, caption='Ground Truth Sample')]
-
-            logs = {
-                "Images": wandb_images
-            }
-            self._wandb.log(logs)

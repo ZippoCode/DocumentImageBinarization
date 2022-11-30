@@ -5,13 +5,16 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.utils.data
+import torchvision.utils
+import wandb
+from torchmetrics import PeakSignalNoiseRatio
+from torchvision.transforms import functional
 from typing_extensions import TypedDict
 
-from dataloader import HandwrittenTextImageDataset
+from dataloader import HandwrittenTextImageDataset, ValidationDataLoader
 from modules.FFC import LaMa
 from trainer.CustomTransforms import create_train_transform, create_valid_transform
 from utils.htr_logging import get_logger
-from torchmetrics import PeakSignalNoiseRatio
 
 
 def calculate_psnr(predicted: torch.Tensor, ground_truth: torch.Tensor, threshold=0.5):
@@ -27,14 +30,22 @@ def calculate_psnr(predicted: torch.Tensor, ground_truth: torch.Tensor, threshol
 
 class LaMaTrainingModule:
 
-    def __init__(self, train_data_path: str, valid_data_path: str, input_channels: int, output_channels: int,
-                 train_batch_size: int, valid_batch_size: int, train_split_size: int, valid_split_size: int,
-                 epochs: int, workers: int, learning_rate: int, device=None, debug=False, criterion=None, wandb=None):
+    def __init__(self, train_data_path: str, train_gt_data_path: str, valid_data_path: str, valid_gt_data_path: str,
+                 input_channels: int, output_channels: int, train_batch_size: int, valid_batch_size: int,
+                 train_split_size: int, valid_split_size: int, epochs: int, workers: int, learning_rate: int,
+                 experiment_name: str, device=None, debug=False, criterion=None, wandb_log=None):
 
+        # Path
         self.train_data_path = train_data_path
+        self.train_gt_data_path = train_gt_data_path
         self.valid_data_path = valid_data_path
+        self.valid_gt_data_path = valid_gt_data_path
+
+        # Batch Size
         self.train_batch_size = train_batch_size
         self.valid_batch_size = valid_batch_size
+
+        # Split Size
         self.train_split_size = train_split_size
         self.valid_split_size = valid_split_size
 
@@ -47,7 +58,7 @@ class LaMaTrainingModule:
         self.device = device
         self.workers = workers
         self.learning_rate = learning_rate
-        self.wandb = wandb
+        self.wandb_log = wandb_log
 
         self.debug = debug
 
@@ -64,6 +75,7 @@ class LaMaTrainingModule:
         # Training
         self.epoch = 0
         self.num_epochs = epochs
+        self.experiment_name = experiment_name
 
         # Criterion
         self.criterion = criterion
@@ -108,73 +120,94 @@ class LaMaTrainingModule:
         torch.save(checkpoint, path)
         self.logger.info(f"Stored checkpoints {path}")
 
-    def validation(self):
+    def validation(self, threshold=0.5):
         total_psnr = 0.0
         valid_loss = 0.0
-        count_images = 0
+        folder = 'results/' + self.experiment_name + '/'
+        os.makedirs(folder, exist_ok=True)
 
-        for valid, gt_valid in self.valid_data_loader:
-            valid = valid.to(self.device)
-            gt_valid = gt_valid.to(self.device)
+        for item in self.valid_data_loader:
+
+            sample = item['sample']
+            num_rows = item['num_rows'].item()
+            samples_patches = item['samples_patches']
+            gt_sample = item['gt_sample']
+
+            valid = samples_patches.to(self.device)
+            gt_valid = gt_sample.to(self.device)
+
+            valid = valid.squeeze(0)
+            valid = valid.permute(0, 3, 2, 1)
 
             pred = self.model(valid)
+            pred = torchvision.utils.make_grid(pred, nrow=num_rows, padding=0, value_range=(0, 1))
+            pred = functional.rgb_to_grayscale(pred)
+            height, width = gt_valid.shape[3], gt_valid.shape[2]
+            pred = functional.crop(pred, top=0, left=0, height=height, width=width)
+            pred = pred.permute(0, 2, 1).unsqueeze(0)
+
             loss = self.criterion(pred, gt_valid)
             valid_loss += loss.item()
 
-            count_images += len(valid)
-            for b in range(len(valid)):
-                pred_img = pred[b]
-                target_img = gt_valid[b]
-                psnr = self.psnr_metric(pred_img, target_img)
-                total_psnr += psnr
+            psnr = calculate_psnr(pred, gt_valid)
+            total_psnr += psnr
 
-            if self.wandb:
-                self.wandb.on_log_images(valid, pred, gt_valid)
+            if self.wandb_log:
+                valid = sample.squeeze(0).detach()
+                pred = pred.squeeze(0).detach()
+                gt_valid = gt_valid.squeeze(0).detach()
 
-        avg_psnr = total_psnr / count_images
-        avg_loss = valid_loss / count_images
+                valid_img = functional.to_pil_image(valid)
+                pred_img = functional.to_pil_image(pred)
+                gt_valid_img = functional.to_pil_image(gt_valid)
+
+                wandb_images = [wandb.Image(valid_img, caption='Sample'),
+                                wandb.Image(pred_img, caption='Predicted Sample'),
+                                wandb.Image(gt_valid_img, caption='Ground Truth Sample')]
+
+                logs = {
+                    "Images": wandb_images
+                }
+                self.wandb_log.on_log(logs)
+
+                # Store image
+                path = folder + item['image_name'][0]
+                pred_img.save(path)
+
+        avg_psnr = total_psnr / len(self.valid_data_loader)
+        avg_loss = valid_loss / len(self.valid_data_loader)
 
         self.logger.info(f"Total Loss: {valid_loss} - Total PSNR: {total_psnr}")
         self.logger.info(f"Valid Average Loss: {avg_loss} - Valid average PSNR: {avg_psnr}")
 
-        if self.wandb:  # Logs Valid Parameters
+        if self.wandb_log:  # Logs Valid Parameters
             logs = {
-                'valid_avg_psnr': avg_psnr,
                 'valid_avg_loss': avg_loss,
+                'valid_avg_psnr': avg_psnr,
             }
-            self.wandb.on_log(logs)
+            self.wandb_log.on_log(logs)
 
         return avg_psnr, avg_loss
 
     def _make_datasets(self):
-        train_transform = create_train_transform(patch_size=self.train_split_size, angle=15.2)
-        train_data_path = self.train_data_path
-        train_data_gt_path = self.train_data_path + '_gt'
-
-        self.train_dataset = HandwrittenTextImageDataset(train_data_gt_path, train_data_gt_path,
+        train_transform = create_train_transform(patch_size=self.train_split_size)
+        self.logger.info(
+            f"Train path: \"{self.train_data_path}\" - Train ground truth path: \"{self.train_gt_data_path}\"")
+        self.train_dataset = HandwrittenTextImageDataset(self.train_data_path, self.train_gt_data_path,
                                                          transform=train_transform)
-        self.logger.info(f"Train path: \"{train_data_path}\" - Train ground truth path: \"{train_data_gt_path}\"")
 
         # Validation
-        valid_transform = create_valid_transform(patch_size=self.valid_split_size)
-        valid_path = self.valid_data_path
-        valid_gt_path = self.valid_data_path + '_gt'
-        if self.valid_split_size:
-            valid_path = valid_path + '/' + str(self.valid_split_size)
-            valid_gt_path = valid_gt_path + '/' + str(self.valid_split_size)
-        else:
-            valid_path = valid_path + '/full'
-            valid_gt_path = valid_gt_path + '/full'
-
-        self.logger.info(f"Validation path: \"{valid_path}\" - Validation ground truth path: \"{valid_gt_path}\"")
-
-        self.valid_dataset = HandwrittenTextImageDataset(valid_path, valid_gt_path, transform=valid_transform)
+        valid_transform = create_valid_transform()
+        self.logger.info(
+            f"Validation path: \"{self.valid_data_path}\" - Validation ground truth path: \"{self.valid_gt_data_path}\"")
+        self.valid_dataset = ValidationDataLoader(self.valid_data_path, self.valid_gt_data_path,
+                                                  transform=valid_transform)
 
     def _make_dataloaders(self):
         self.train_data_loader = torch.utils.data.DataLoader(self.train_dataset, batch_size=self.train_batch_size,
                                                              shuffle=True, num_workers=self.workers, pin_memory=True)
         self.valid_data_loader = torch.utils.data.DataLoader(self.valid_dataset, batch_size=self.valid_batch_size,
-                                                             num_workers=self.workers, pin_memory=True)
+                                                             num_workers=self.workers, shuffle=False, pin_memory=True)
 
         self.logger.info(f"Training set has {len(self.train_dataset)} instances")
         self.logger.info(f"Validation set has {len(self.valid_dataset)} instances")
