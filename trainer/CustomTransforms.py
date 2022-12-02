@@ -76,9 +76,18 @@ class CenterCrop(transforms.CenterCrop):
         return {'image': image, 'gt': gt}
 
 
+class GaussianBlur(transforms.GaussianBlur):
+    def __call__(self, sample):
+        image, gt = sample['image'], sample['gt']
+        image = super().forward(image)
+        gt = super().forward(gt)
+        return {'image': image, 'gt': gt}
+
+
 def create_train_transform(patch_size: int):
     transform = transforms.Compose([
         ColorJitter(),
+        # GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
         RandomRotation((0, 360)),
         RandomHorizontalFlip(),
         RandomVerticalFlip(),

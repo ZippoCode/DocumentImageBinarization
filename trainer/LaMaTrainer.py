@@ -94,10 +94,10 @@ class LaMaTrainingModule:
 
     def load_checkpoints(self, folder: str):
         checkpoints_path = folder + "best_psnr.pth"
-        self.logger.info(f"Loading pretrained model from {checkpoints_path}")
 
         if not os.path.exists(path=checkpoints_path):
-            self.logger.error(f"[ERROR] Checkpoints {checkpoints_path} not found.")
+            self.logger.warning(f"Checkpoints {checkpoints_path} not found.")
+            return
 
         checkpoint = torch.load(checkpoints_path, map_location=None)
         self.model.load_state_dict(checkpoint['model'], strict=True)
@@ -105,29 +105,32 @@ class LaMaTrainingModule:
         self.epoch = checkpoint['epoch']
         self.best_psnr = checkpoint['best_psnr']
         self.criterion = checkpoint['criterion']
+        self.criterion = checkpoint['learning_rate']
+        self.logger.info(f"Loaded pretrained checkpoint model from \"{checkpoints_path}\"")
 
-    def save_checkpoints(self, folder: str):
-        os.makedirs(folder, exist_ok=True)
+    def save_checkpoints(self, root_folder: str):
+        os.makedirs(root_folder, exist_ok=True)
         checkpoint = {
             'model': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'epoch': self.epoch,
             'best_psnr': self.best_psnr,
-            'criterion': self.criterion
+            'criterion': self.criterion,
+            'learning_rate': self.learning_rate,
         }
 
-        path = folder + "best_psnr.pth"
-        torch.save(checkpoint, path)
-        self.logger.info(f"Stored checkpoints {path}")
+        dir_path = root_folder + f"{self.experiment_name}_best_psnr.pth"
+        torch.save(checkpoint, dir_path)
+        self.logger.info(f"Stored checkpoints {dir_path}")
 
     def validation(self, threshold=0.5):
         total_psnr = 0.0
         valid_loss = 0.0
-        folder = 'results/' + self.experiment_name + '/'
-        os.makedirs(folder, exist_ok=True)
+        images = {}
 
         for item in self.valid_data_loader:
 
+            image_name = item['image_name'][0]
             sample = item['sample']
             num_rows = item['num_rows'].item()
             samples_patches = item['samples_patches']
@@ -152,27 +155,26 @@ class LaMaTrainingModule:
             psnr = calculate_psnr(pred, gt_valid)
             total_psnr += psnr
 
+            pred = pred.squeeze(0).detach()
+            pred = torch.clamp(pred, min=0, max=1)
+            pred_img = functional.to_pil_image(pred)
+            images[image_name] = pred_img
+
             if self.wandb_log:
                 valid = sample.squeeze(0).detach()
-                pred = pred.squeeze(0).detach()
                 gt_valid = gt_valid.squeeze(0).detach()
 
                 valid_img = functional.to_pil_image(valid)
-                pred_img = functional.to_pil_image(pred)
                 gt_valid_img = functional.to_pil_image(gt_valid)
 
-                wandb_images = [wandb.Image(valid_img, caption='Sample'),
-                                wandb.Image(pred_img, caption='Predicted Sample'),
-                                wandb.Image(gt_valid_img, caption='Ground Truth Sample')]
+                wandb_images = [wandb.Image(valid_img, caption=f"Sample: {image_name}"),
+                                wandb.Image(pred_img, caption=f"Predicted Sample: {image_name}"),
+                                wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {image_name}")]
 
                 logs = {
                     "Images": wandb_images
                 }
                 self.wandb_log.on_log(logs)
-
-                # Store image
-                path = folder + item['image_name'][0]
-                pred_img.save(path)
 
         avg_psnr = total_psnr / len(self.valid_data_loader)
         avg_loss = valid_loss / len(self.valid_data_loader)
@@ -187,7 +189,7 @@ class LaMaTrainingModule:
             }
             self.wandb_log.on_log(logs)
 
-        return avg_psnr, avg_loss
+        return avg_psnr, avg_loss, images
 
     def _make_datasets(self):
         train_transform = create_train_transform(patch_size=self.train_split_size)

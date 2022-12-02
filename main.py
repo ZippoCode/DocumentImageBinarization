@@ -1,8 +1,6 @@
 import torch
 
-from dataloader import HandwrittenTextImageDataset
 from train import LMSELoss
-from trainer.CustomTransforms import create_train_transform, create_valid_transform
 from trainer.LaMaTrainer import LaMaTrainingModule
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -40,11 +38,11 @@ def test_validation():
 
 
 def test_save_and_load():
-    trainer.save_checkpoints('weights/')
-    trainer.load_checkpoints('weights/')
+    #    trainer.save_checkpoints('blablabla/')
+    trainer.load_checkpoints('blablabla/')
 
 
 if __name__ == '__main__':
     # test_dataloader()
-    test_validation()
-    # test_save_and_load(trainer)
+    # test_validation()
+    test_save_and_load()

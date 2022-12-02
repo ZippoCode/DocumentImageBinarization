@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 import time
 
@@ -31,15 +32,24 @@ class LMSELoss(torch.nn.MSELoss):
 def train(args):
     start_time = time.time()
 
-    if args.experiment_name == 'custom_loss':
-        criterion = LMSELoss().to(device)
-    else:
+    if args.experiment_name == 'mse_loss':
         criterion = torch.nn.MSELoss().to(device)
+    else:
+        criterion = LMSELoss().to(device)
 
     # Configure WandB
     wandb_log = None
     if not debug:
-        wandb_log = WandbLog()
+        experiment_name = args.experiment_name + "_lr_" + str(args.learning_rate)
+        wandb_log = WandbLog(experiment_name=experiment_name)
+        params = {
+            "learning_rate": args.learning_rate,
+            "epochs": args.num_epochs,
+            "train_batch_size": args.train_batch_size,
+            "valid_batch_size": args.valid_batch_size,
+            "architecture": "lama"
+        }
+        wandb_log.setup(**params)
 
     trainer = LaMaTrainingModule(train_data_path=args.train_data_path, train_gt_data_path=args.train_gt_data_path,
                                  valid_data_path=args.valid_data_path, valid_gt_data_path=args.valid_gt_data_path,
@@ -49,32 +59,20 @@ def train(args):
                                  workers=args.workers, epochs=args.num_epochs, learning_rate=args.learning_rate,
                                  debug=debug, device=device, criterion=criterion, wandb_log=wandb_log,
                                  experiment_name=args.experiment_name)
-
-    # Make experiment name
-    experiment_name = args.experiment_name + "_lr_" + str(args.learning_rate)
-    path_checkpoints = args.path_checkpoint + args.experiment_name + '/'
-
-    if wandb_log:  # Setup Wandb
-        params = {
-            "experiment_name": experiment_name,
-            "learning_rate": args.learning_rate,
-            "epochs": args.num_epochs,
-            "train_batch_size": args.train_batch_size,
-            "valid_batch_size": args.valid_batch_size,
-            "architecture": "lama"
-        }
-        wandb_log.setup(model=trainer.model, **params)
+    if wandb_log:
+        wandb_log.add_watch(trainer.model)
 
     if torch.cuda.is_available():
         trainer.model.cuda()
 
     try:
+        logger.info("Start training")
+
         for epoch in range(1, args.num_epochs):
 
             num_images = 0
 
             if args.train:
-                logger.info("Start training")
                 logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}\n ----------------------------")
 
                 train_loss = 0.0
@@ -126,11 +124,19 @@ def train(args):
             # Validation
             trainer.model.eval()
             with torch.no_grad():
-                psnr, valid_loss = trainer.validation()
+                psnr, valid_loss, images = trainer.validation()
 
                 if psnr > trainer.best_psnr:
-                    trainer.save_checkpoints(path_checkpoints)
+                    trainer.save_checkpoints(args.path_checkpoint)
                     trainer.best_psnr = psnr
+
+                    # Save images
+                    folder = 'results/' + args.experiment_name + '/'
+                    os.makedirs(folder, exist_ok=True)
+                    for name_image, predicted_image in images.items():
+                        path = folder + name_image
+                        predicted_image.save(path)
+                    logger.info("Store predicted images")
 
             trainer.epoch += 1
             if wandb_log:

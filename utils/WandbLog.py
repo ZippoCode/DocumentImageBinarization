@@ -23,23 +23,26 @@ def rewrite_logs(dictionary: dict):
 
 class WandbLog(object):
 
-    def __init__(self):
+    def __init__(self, experiment_name: str, project="test-project", entity="fomo_thesis"):
         self._wandb = wandb
         self._initialized = False
-        self._project = "test-project"
-        self._entity = "fomo_thesis"
+        self._project = project
+        self._entity = entity
+        self._experiment_name = experiment_name
+        self._dir = '/tmp'
 
-    def setup(self, model, **kwargs):
+    def setup(self, **kwargs):
         if self._wandb is None:
             return
         self._initialized = True
 
         # Configuration
         if self._wandb.run is None:
-            name = kwargs['experiment_name'] if kwargs['experiment_name'] else "train_lama_htr"
-            self._wandb.init(project=self._project, entity=self._entity, name=name, config={**kwargs})
+            self._wandb.init(project=self._project, entity=self._entity, name=self._experiment_name, dir=self._dir)
         self._wandb.config = {**kwargs}
         self._wandb.config.update()
+
+    def add_watch(self, model):
         self._wandb.watch(model, log="all")
 
     def on_log(self, logs=None):
