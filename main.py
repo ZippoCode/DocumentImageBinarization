@@ -1,48 +1,31 @@
-import torch
-
-from train import LMSELoss
-from trainer.LaMaTrainer import LaMaTrainingModule
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-train_data_path = 'patches/train'
-train_gt_data_path = 'patches/train_gt'
-valid_data_path = 'patches/valid/full'
-valid_gt_data_path = 'patches/valid_gt/full'
-input_channels = 3
-output_channels = 1
-train_batch_size = 8
-valid_batch_size = 1
-train_split_size = 256
-valid_split_size = 256
-workers = 0
-debug = True
-epochs = 150
-path_checkpoint = 'weights/custom_loss/'
-criterion = LMSELoss().to(device)
-
-trainer = LaMaTrainingModule(train_data_path=train_data_path, train_gt_data_path=train_gt_data_path,
-                             valid_data_path=valid_data_path, valid_gt_data_path=valid_gt_data_path,
-                             input_channels=input_channels, output_channels=output_channels,
-                             train_batch_size=train_batch_size, valid_batch_size=valid_batch_size,
-                             train_split_size=train_split_size, valid_split_size=valid_split_size,
-                             workers=workers, epochs=epochs, debug=debug, device=device, learning_rate=1,
-                             criterion=criterion, experiment_name='main')
+import os
 
 
-def test_validation():
-    trainer.load_checkpoints(path_checkpoint)
-    trainer.model.eval()
-
-    with torch.no_grad():
-        trainer.validation()
+from data.process_image import PatchImage, configure_args
 
 
-def test_save_and_load():
-    #    trainer.save_checkpoints('blablabla/')
-    trainer.load_checkpoints('blablabla/')
+def create_patches(path_configuration: str):
+    args = configure_args(path_configuration)
+    root_original = args.path_original
+    root_ground_truth = args.path_ground_truth
+    destination = args.path_destination
+    patch_size = args.patch_size
+    patch_size_valid = args.patch_size_valid
+    overlap_size = args.overlap_size
+    validation_dataset = args.validation_dataset
+    testing_dataset = args.testing_dataset
+
+    patcher = PatchImage(patch_size=patch_size,
+                         patch_size_valid=patch_size_valid,
+                         overlap_size=overlap_size,
+                         destination_root=destination)
+    patcher.create_patches(root_original=root_original,
+                           root_ground_truth=root_ground_truth,
+                           validation_dataset=validation_dataset,
+                           test_dataset=testing_dataset)
 
 
 if __name__ == '__main__':
-    # test_dataloader()
-    # test_validation()
-    test_save_and_load()
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    path_config = os.path.join(root_dir, 'configs/create_patches.yaml')
+    create_patches(path_config)

@@ -1,5 +1,3 @@
-import torch
-import torchvision.transforms.functional as functional
 import wandb
 
 
@@ -38,9 +36,8 @@ class WandbLog(object):
 
         # Configuration
         if self._wandb.run is None:
-            self._wandb.init(project=self._project, entity=self._entity, name=self._experiment_name, dir=self._dir)
-        self._wandb.config = {**kwargs}
-        self._wandb.config.update()
+            self._wandb.init(project=self._project, entity=self._entity, name=self._experiment_name, dir=self._dir,
+                             config={**kwargs})
 
     def add_watch(self, model):
         self._wandb.watch(model, log="all")

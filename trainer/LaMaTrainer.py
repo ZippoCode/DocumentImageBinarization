@@ -11,9 +11,10 @@ from torchmetrics import PeakSignalNoiseRatio
 from torchvision.transforms import functional
 from typing_extensions import TypedDict
 
-from dataloader import HandwrittenTextImageDataset, ValidationDataLoader
+from data.dataloaders import make_train_dataloader, \
+    make_valid_dataloader
 from modules.FFC import LaMa
-from trainer.CustomTransforms import create_train_transform, create_valid_transform
+from trainer.Losses import LMSELoss
 from utils.htr_logging import get_logger
 
 
@@ -30,34 +31,22 @@ def calculate_psnr(predicted: torch.Tensor, ground_truth: torch.Tensor, threshol
 
 class LaMaTrainingModule:
 
-    def __init__(self, train_data_path: str, train_gt_data_path: str, valid_data_path: str, valid_gt_data_path: str,
-                 input_channels: int, output_channels: int, train_batch_size: int, valid_batch_size: int,
-                 train_split_size: int, valid_split_size: int, epochs: int, workers: int, learning_rate: int,
-                 experiment_name: str, device=None, debug=False, criterion=None, wandb_log=None):
-
-        # Path
-        self.train_data_path = train_data_path
-        self.train_gt_data_path = train_gt_data_path
-        self.valid_data_path = valid_data_path
-        self.valid_gt_data_path = valid_gt_data_path
+    def __init__(self, config, experiment_name: str, device=None, debug=False, wandb_log=None):
 
         # Batch Size
-        self.train_batch_size = train_batch_size
-        self.valid_batch_size = valid_batch_size
+        self.train_batch_size = config['train_batch_size']
+        self.valid_batch_size = config['valid_batch_size']
 
         # Split Size
-        self.train_split_size = train_split_size
-        self.valid_split_size = valid_split_size
+        self.train_split_size = config['train_split_size']
+        self.valid_split_size = config['valid_split_size']
 
-        self.train_dataset = None
-        self.valid_dataset = None
-        self.train_data_loader = None
-        self.valid_data_loader = None
+        self.train_data_loader = make_train_dataloader(config)
+        self.valid_data_loader = make_valid_dataloader(config)
         self.optimizer = None
 
         self.device = device
-        self.workers = workers
-        self.learning_rate = learning_rate
+        self.learning_rate = config['learning_rate']
         self.wandb_log = wandb_log
 
         self.debug = debug
@@ -67,18 +56,15 @@ class LaMaTrainingModule:
         init_conv_kwargs: arguments = {'ratio_gin': 0, 'ratio_gout': 0}  # REMOVE
         down_sample_conv_kwargs: arguments = {'ratio_gin': 0, 'ratio_gout': 0}  # REMOVE
         resnet_conv_kwargs: arguments = {'ratio_gin': 0.75, 'ratio_gout': 0.75}  # REMOVE
-        self.model = LaMa(input_nc=input_channels, output_nc=output_channels,
+        self.model = LaMa(input_nc=config['input_channels'], output_nc=config['output_channels'],
                           init_conv_kwargs=init_conv_kwargs, downsample_conv_kwargs=down_sample_conv_kwargs,
                           resnet_conv_kwargs=resnet_conv_kwargs)
-        self.model.to(self.device)
 
         # Training
         self.epoch = 0
-        self.num_epochs = epochs
+        self.num_epochs = config['num_epochs']
         self.experiment_name = experiment_name
-
-        # Criterion
-        self.criterion = criterion
+        self.kind_loss = config['kind_loss']
 
         # Validation
         self.psnr_metric = PeakSignalNoiseRatio().to(device=device)
@@ -88,9 +74,10 @@ class LaMaTrainingModule:
         # Logging
         self.logger = get_logger(LaMaTrainingModule.__name__, debug)
 
-        self._make_datasets()
-        self._make_dataloaders()
+        # Criterion
+
         self._create_optimizer()
+        self._make_criterion()
 
     def load_checkpoints(self, folder: str):
         checkpoints_path = folder + "best_psnr.pth"
@@ -179,8 +166,10 @@ class LaMaTrainingModule:
         avg_psnr = total_psnr / len(self.valid_data_loader)
         avg_loss = valid_loss / len(self.valid_data_loader)
 
-        self.logger.info(f"Total Loss: {valid_loss} - Total PSNR: {total_psnr}")
-        self.logger.info(f"Valid Average Loss: {avg_loss} - Valid average PSNR: {avg_psnr}")
+        self.logger.info("Validation info:")
+        self.logger.info(f"\tTotal Loss: {valid_loss:0.6f} - Total PSNR: {total_psnr:0.6f}")
+        self.logger.info(f"\tAverage Loss: {avg_loss:0.6f} - Average PSNR: {avg_psnr:0.6f}")
+        self.logger.info(f"\tBest PSNR: {self.best_psnr:0.6f}")
 
         if self.wandb_log:  # Logs Valid Parameters
             logs = {
@@ -191,29 +180,12 @@ class LaMaTrainingModule:
 
         return avg_psnr, avg_loss, images
 
-    def _make_datasets(self):
-        train_transform = create_train_transform(patch_size=self.train_split_size)
-        self.logger.info(
-            f"Train path: \"{self.train_data_path}\" - Train ground truth path: \"{self.train_gt_data_path}\"")
-        self.train_dataset = HandwrittenTextImageDataset(self.train_data_path, self.train_gt_data_path,
-                                                         transform=train_transform)
-
-        # Validation
-        valid_transform = create_valid_transform()
-        self.logger.info(
-            f"Validation path: \"{self.valid_data_path}\" - Validation ground truth path: \"{self.valid_gt_data_path}\"")
-        self.valid_dataset = ValidationDataLoader(self.valid_data_path, self.valid_gt_data_path,
-                                                  transform=valid_transform)
-
-    def _make_dataloaders(self):
-        self.train_data_loader = torch.utils.data.DataLoader(self.train_dataset, batch_size=self.train_batch_size,
-                                                             shuffle=True, num_workers=self.workers, pin_memory=True)
-        self.valid_data_loader = torch.utils.data.DataLoader(self.valid_dataset, batch_size=self.valid_batch_size,
-                                                             num_workers=self.workers, shuffle=False, pin_memory=True)
-
-        self.logger.info(f"Training set has {len(self.train_dataset)} instances")
-        self.logger.info(f"Validation set has {len(self.valid_dataset)} instances")
-
     def _create_optimizer(self):
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.95),
                                      eps=1e-08, weight_decay=0.05, amsgrad=False)
+
+    def _make_criterion(self):
+        if self.kind_loss == 'mse_loss':
+            self.criterion = torch.nn.MSELoss().to(self.device)
+        else:
+            self.criterion = LMSELoss().to(self.device)

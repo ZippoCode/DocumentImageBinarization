@@ -1,12 +1,12 @@
 import argparse
+import logging
 import os
 import random
 
 import cv2
 import numpy as np
+import yaml
 from tqdm import tqdm
-import logging
-import config
 
 
 def check_or_create_folder(name: str):
@@ -33,7 +33,9 @@ class PatchImage:
         self.number_image = 1
         self.image_name = ""
 
-        logging.info("Configure patcher,")
+        logging.info("Configuration patches ...")
+        logging.info(f"Using Patch size: {self.patch_size} - Overlapping: {self.overlap_size}")
+        logging.info(f"Using Valid patch size: {self.patch_size_valid}")
         self._create_folders()
 
     def _create_folders(self):
@@ -43,7 +45,7 @@ class PatchImage:
         check_or_create_folder(self.valid_gt_folder)
         check_or_create_folder(self.test_folder)
         check_or_create_folder(self.test_gt_folder)
-        logging.info("Prepared folders.")
+        logging.info("Configuration folders ...")
 
     def create_patches(self, root_original: str, root_ground_truth: str, test_dataset, validation_dataset):
         logging.info("Start process ...")
@@ -121,65 +123,54 @@ class PatchImage:
         return folder + self.image_name.split('.')[0] + '_' + str(i) + '_' + str(j) + '.png'
 
 
-def configure_args():
+def configure_args(path_configuration: str):
+    with open(path_configuration) as file:
+        config_options = yaml.load(file, Loader=yaml.Loader)
+        file.close()
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    paths = config_options['paths']
+
     parser.add_argument('-destination', '--path_destination',
                         metavar='<path>',
                         type=str,
                         help=f"destination folder path with contains the patches",
-                        default=config.path_destination)
+                        default=paths['destination'])
     parser.add_argument('-original', '--path_original',
                         metavar='<path>',
                         type=str,
                         help="phe path witch contains the ruined images",
-                        default=config.path_dataset)
+                        default=paths['train'])
     parser.add_argument('-ground_truth', '--path_ground_truth',
                         metavar='<path>',
                         type=str,
                         help="path which contains the ground truth images",
-                        default=config.path_ground_truth)
+                        default=paths['ground_truth'])
     parser.add_argument('-size', '--patch_size',
                         metavar='<number>',
                         type=int,
                         help="size of ruined patch",
-                        default=config.patch_size)
+                        default=config_options['patch_size'])
     parser.add_argument('-size_valid', '--patch_size_valid',
                         metavar='<number>',
                         type=int,
                         help='size of valid image patch',
-                        default=config.patch_size_valid)
+                        default=config_options['patch_size_valid'])
     parser.add_argument('-overlap', '--overlap_size',
                         metavar='<number>',
                         type=int,
                         help='overlap_size',
-                        default=config.overlap_size)
+                        default=config_options['overlap_size'])
     parser.add_argument('-validation', '--validation_dataset',
                         metavar='<path>',
                         type=str,
                         help='folder which contains images will are used to create the validation dataset',
-                        default=config.validation_dataset)
+                        default=config_options['validation_dataset'])
     parser.add_argument('-test', '--testing_dataset',
                         dest="testing_dataset",
                         metavar='<path>',
                         type=str,
                         help='folder which contains images will are used to create the training dataset',
-                        default=config.testing_dataset)
+                        default=config_options['testing_dataset'])
 
     return parser.parse_args()
-
-
-if __name__ == '__main__':
-    args = configure_args()
-    root_original = args.path_original
-    root_ground_truth = args.path_ground_truth
-    destination = args.path_destination
-    patch_size = args.patch_size
-    patch_size_valid = args.patch_size_valid
-    overlap_size = args.overlap_size
-    validation_dataset = args.validation_dataset
-    testing_dataset = args.testing_dataset
-
-    patcher = PatchImage(patch_size=patch_size, patch_size_valid=patch_size_valid, overlap_size=overlap_size,
-                         destination_root=destination)
-    patcher.create_patches(root_original=root_original, root_ground_truth=root_ground_truth,
-                           validation_dataset=validation_dataset, test_dataset=testing_dataset)

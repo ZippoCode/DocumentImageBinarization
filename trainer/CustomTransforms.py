@@ -84,21 +84,19 @@ class GaussianBlur(transforms.GaussianBlur):
         return {'image': image, 'gt': gt}
 
 
-def create_train_transform(patch_size: int):
-    transform = transforms.Compose([
-        ColorJitter(),
-        # GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5)),
-        RandomRotation((0, 360)),
-        RandomHorizontalFlip(),
-        RandomVerticalFlip(),
-        RandomCrop(patch_size),
-        ToTensor()
-    ])
-    return transform
+class RandomAutoContrast(transforms.RandomAutocontrast):
+    def __call__(self, sample):
+        image, gt = sample['image'], sample['gt']
+        if random.random() < self.p:
+            image = functional.autocontrast(image)
+            gt = functional.autocontrast(gt)
+        return {'image': image, 'gt': gt}
 
 
-def create_valid_transform():
-    transform = transforms.Compose([
-        transforms.ToTensor()
-    ])
-    return transform
+class RandomEqualize(transforms.RandomEqualize):
+    def __call__(self, sample):
+        image, gt = sample['image'], sample['gt']
+        if random.random() < self.p:
+            image = functional.equalize(image)
+            gt = functional.equalize(gt)
+        return {'image': image, 'gt': gt}

@@ -4,6 +4,7 @@ import sys
 import time
 
 import torch
+import yaml
 
 from trainer.LaMaTrainer import LaMaTrainingModule, calculate_psnr
 from utils.WandbLog import WandbLog
@@ -22,42 +23,27 @@ logger.info(f"Using {device} device")
 threshold = 0.5
 
 
-class LMSELoss(torch.nn.MSELoss):
-    def forward(self, inputs, targets):
-        mse = super().forward(inputs, targets)
-        mse = torch.add(mse, 1e-10)
-        return torch.log10(mse)
-
-
-def train(args):
+def train(args, config):
     start_time = time.time()
-
-    if args.experiment_name == 'mse_loss':
-        criterion = torch.nn.MSELoss().to(device)
-    else:
-        criterion = LMSELoss().to(device)
 
     # Configure WandB
     wandb_log = None
     if not debug:
-        experiment_name = args.experiment_name + "_lr_" + str(args.learning_rate)
+        experiment_name = f"{args.experiment_name}_{args.config_filename}"
         wandb_log = WandbLog(experiment_name=experiment_name)
         params = {
-            "learning_rate": args.learning_rate,
-            "epochs": args.num_epochs,
-            "train_batch_size": args.train_batch_size,
-            "valid_batch_size": args.valid_batch_size,
-            "architecture": "lama"
+            "Learning Rate": config['learning_rate'],
+            "Epochs": config['num_epochs'],
+            "Train Batch Size": config['train_batch_size'],
+            "Valid Batch Size": config['valid_batch_size'],
+            "Train Split Size": config['train_split_size'],
+            "Valid Split Size": config['valid_split_size'],
+            "Architecture": "lama",
+            "Best PSNR": 0,
         }
         wandb_log.setup(**params)
 
-    trainer = LaMaTrainingModule(train_data_path=args.train_data_path, train_gt_data_path=args.train_gt_data_path,
-                                 valid_data_path=args.valid_data_path, valid_gt_data_path=args.valid_gt_data_path,
-                                 input_channels=args.input_channels, output_channels=args.output_channels,
-                                 train_batch_size=args.train_batch_size, valid_batch_size=args.valid_batch_size,
-                                 train_split_size=args.train_split_size, valid_split_size=args.valid_split_size,
-                                 workers=args.workers, epochs=args.num_epochs, learning_rate=args.learning_rate,
-                                 debug=debug, device=device, criterion=criterion, wandb_log=wandb_log,
+    trainer = LaMaTrainingModule(config, debug=debug, device=device, wandb_log=wandb_log,
                                  experiment_name=args.experiment_name)
     if wandb_log:
         wandb_log.add_watch(trainer.model)
@@ -68,7 +54,7 @@ def train(args):
     try:
         logger.info("Start training")
 
-        for epoch in range(1, args.num_epochs):
+        for epoch in range(1, config['num_epochs']):
 
             num_images = 0
 
@@ -86,7 +72,7 @@ def train(args):
                     trainer.optimizer.zero_grad()
 
                     pred = trainer.model(inputs)
-                    loss = criterion(pred, outputs)
+                    loss = trainer.criterion(pred, outputs)
 
                     predicted_time = time.time() - start_time
 
@@ -100,7 +86,7 @@ def train(args):
                     with torch.no_grad():  # PSNR Train
                         psnr = calculate_psnr(predicted=pred, ground_truth=outputs, threshold=threshold)
                         train_psnr += psnr
-                        # trainer.model.train()
+                        # trainer.model.training()
 
                     if i % 100 == 0:
                         elapsed_time = time.time() - start_time
@@ -127,7 +113,9 @@ def train(args):
                 psnr, valid_loss, images = trainer.validation()
 
                 if psnr > trainer.best_psnr:
-                    trainer.save_checkpoints(args.path_checkpoint)
+                    wandb_log.on_log({'Best PSNR': psnr})
+
+                    trainer.save_checkpoints(config['path_checkpoint'])
                     trainer.best_psnr = psnr
 
                     # Save images
@@ -153,27 +141,20 @@ if __name__ == '__main__':
 
     parser.add_argument('-name', '--experiment_name', metavar='<name>', type=str,
                         help=f"The experiment name which will use on WandB", default="debug")
-    parser.add_argument('-lr', '--learning_rate', metavar="<float>", help="The learning rate for the experiment",
-                        type=float, default=1.5e-4)
-
-    # Default values
-    parser.add_argument('--train_data_path', type=str, default='patches/train')
-    parser.add_argument('--train_gt_data_path', type=str, default='patches/train_gt')
-    parser.add_argument('--valid_data_path', type=str, default='patches/valid/full')
-    parser.add_argument('--valid_gt_data_path', type=str, default='patches/valid_gt/full')
-    parser.add_argument('--train_batch_size', type=int, default=4)
-    parser.add_argument('--valid_batch_size', type=int, default=1)
-    parser.add_argument('--train_split_size', type=int, default=256)
-    parser.add_argument('--valid_split_size', type=int, default=512)
-    parser.add_argument('--input_channels', type=int, default=3)
-    parser.add_argument('--output_channels', type=int, default=1)
-    parser.add_argument('--workers', default=1, type=int)
-    parser.add_argument('--num_epochs', type=int, default=150)
-    parser.add_argument('--path_checkpoint', type=str, default='weights/')
-
+    parser.add_argument('-config', '--config_filename', metavar='<name>', type=str,
+                        help=f"The filename which contains train configuration", default="custom_mse")
     parser.add_argument('--train', type=bool, default=True)
 
     args = parser.parse_args()
     args.num_gpu = torch.cuda.device_count()
+    config_filename = args.config_filename
 
-    train(args)
+    logger.info("Start process ...")
+    configuration_path = f"configs/training/{config_filename}.yaml"
+    logger.info(f"Selected \"{configuration_path}\" configuration file")
+
+    with open(configuration_path) as file:
+        train_config = yaml.load(file, Loader=yaml.Loader)
+        file.close()
+
+    train(args, train_config)
