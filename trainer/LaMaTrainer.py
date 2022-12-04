@@ -79,8 +79,8 @@ class LaMaTrainingModule:
         self._create_optimizer()
         self._make_criterion()
 
-    def load_checkpoints(self, folder: str):
-        checkpoints_path = folder + "best_psnr.pth"
+    def load_checkpoints(self, folder: str, filename: str):
+        checkpoints_path = f"{folder}{filename}_best_psnr.pth"
 
         if not os.path.exists(path=checkpoints_path):
             self.logger.warning(f"Checkpoints {checkpoints_path} not found.")
@@ -92,7 +92,7 @@ class LaMaTrainingModule:
         self.epoch = checkpoint['epoch']
         self.best_psnr = checkpoint['best_psnr']
         self.criterion = checkpoint['criterion']
-        self.criterion = checkpoint['learning_rate']
+        self.learning_rate = checkpoint['learning_rate']
         self.logger.info(f"Loaded pretrained checkpoint model from \"{checkpoints_path}\"")
 
     def save_checkpoints(self, root_folder: str):
@@ -143,7 +143,8 @@ class LaMaTrainingModule:
             total_psnr += psnr
 
             pred = pred.squeeze(0).detach()
-            pred = torch.clamp(pred, min=0, max=1)
+            # pred = torch.clamp(pred, min=0, max=1)
+            pred = torch.where(pred > threshold, 1., 0.)
             pred_img = functional.to_pil_image(pred)
             images[image_name] = pred_img
 
@@ -185,7 +186,7 @@ class LaMaTrainingModule:
                                      eps=1e-08, weight_decay=0.05, amsgrad=False)
 
     def _make_criterion(self):
-        if self.kind_loss == 'mse_loss':
+        if self.kind_loss == 'default_mse':
             self.criterion = torch.nn.MSELoss().to(self.device)
         else:
             self.criterion = LMSELoss().to(self.device)

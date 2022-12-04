@@ -93,6 +93,15 @@ class RandomAutoContrast(transforms.RandomAutocontrast):
         return {'image': image, 'gt': gt}
 
 
+class RandomAdjustSharpness(transforms.RandomAdjustSharpness):
+    def __call__(self, sample):
+        image, gt = sample['image'], sample['gt']
+        if random.random() < self.p:
+            image = functional.adjust_contrast(image, self.sharpness_factor)
+            gt = functional.adjust_contrast(gt, self.sharpness_factor)
+        return {'image': image, 'gt': gt}
+
+
 class RandomEqualize(transforms.RandomEqualize):
     def __call__(self, sample):
         image, gt = sample['image'], sample['gt']

@@ -29,8 +29,7 @@ def train(args, config):
     # Configure WandB
     wandb_log = None
     if not debug:
-        experiment_name = f"{args.experiment_name}_{args.config_filename}"
-        wandb_log = WandbLog(experiment_name=experiment_name)
+        wandb_log = WandbLog(experiment_name=args.experiment_name)
         params = {
             "Learning Rate": config['learning_rate'],
             "Epochs": config['num_epochs'],
@@ -39,7 +38,6 @@ def train(args, config):
             "Train Split Size": config['train_split_size'],
             "Valid Split Size": config['valid_split_size'],
             "Architecture": "lama",
-            "Best PSNR": 0,
         }
         wandb_log.setup(**params)
 
@@ -52,14 +50,14 @@ def train(args, config):
         trainer.model.cuda()
 
     try:
-        logger.info("Start training")
 
         for epoch in range(1, config['num_epochs']):
 
             num_images = 0
 
             if args.train:
-                logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}\n ----------------------------")
+                logger.info("Start training") if epoch == 1 else None
+                logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}")
 
                 train_loss = 0.0
                 train_psnr = 0.0
@@ -113,7 +111,8 @@ def train(args, config):
                 psnr, valid_loss, images = trainer.validation()
 
                 if psnr > trainer.best_psnr:
-                    wandb_log.on_log({'Best PSNR': psnr})
+                    if wandb_log:
+                        wandb_log.on_log({'Best PSNR': psnr})
 
                     trainer.save_checkpoints(config['path_checkpoint'])
                     trainer.best_psnr = psnr
@@ -141,13 +140,10 @@ if __name__ == '__main__':
 
     parser.add_argument('-name', '--experiment_name', metavar='<name>', type=str,
                         help=f"The experiment name which will use on WandB", default="debug")
-    parser.add_argument('-config', '--config_filename', metavar='<name>', type=str,
-                        help=f"The filename which contains train configuration", default="custom_mse")
     parser.add_argument('--train', type=bool, default=True)
 
     args = parser.parse_args()
-    args.num_gpu = torch.cuda.device_count()
-    config_filename = args.config_filename
+    config_filename = args.experiment_name
 
     logger.info("Start process ...")
     configuration_path = f"configs/training/{config_filename}.yaml"

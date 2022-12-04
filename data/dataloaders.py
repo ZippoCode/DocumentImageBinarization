@@ -63,6 +63,29 @@ def get_transform(transform_variant: str, output_size: int):
             CustomTransform.RandomCrop(output_size),
             CustomTransform.ToTensor()
         ])
+    elif transform_variant == 'adjust_sharpness':
+        transform = transforms.Compose([
+            CustomTransform.ColorJitter(brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5),
+            CustomTransform.RandomAdjustSharpness(sharpness_factor=0),
+            CustomTransform.RandomRotation((0, 360)),
+            CustomTransform.RandomHorizontalFlip(),
+            CustomTransform.RandomVerticalFlip(),
+            CustomTransform.RandomCrop(output_size),
+            CustomTransform.ToTensor()
+        ])
+    elif transform_variant == 'all_transforms':
+        transform = transforms.Compose([
+            CustomTransform.ColorJitter(brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5),
+            CustomTransform.GaussianBlur(kernel_size=(3, 5), sigma=(0.3, 1.5)),
+            CustomTransform.RandomAdjustSharpness(sharpness_factor=0),
+            CustomTransform.RandomEqualize(),
+            CustomTransform.RandomAutoContrast(),
+            CustomTransform.RandomRotation((0, 360)),
+            CustomTransform.RandomHorizontalFlip(),
+            CustomTransform.RandomVerticalFlip(),
+            CustomTransform.RandomCrop(output_size),
+            CustomTransform.ToTensor()
+        ])
     else:
         transform = transforms.Compose([
             CustomTransform.ToTensor()
