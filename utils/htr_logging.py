@@ -1,7 +1,14 @@
 import logging
+import sys
+
+get_trace = getattr(sys, 'gettrace', None)
+debug = False
+if get_trace():
+    print('Program runs in Debug mode')
+    debug = True
 
 
-def get_logger(name: str, debug: bool):
+def get_logger(name: str):
     logger = logging.getLogger(name=name)
     logger.setLevel(logging.DEBUG if debug else logging.INFO)
     stream_handler = logging.StreamHandler()

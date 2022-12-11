@@ -1,3 +1,4 @@
+import errno
 import math
 import os
 
@@ -5,14 +6,13 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.utils.data
-import torchvision.utils
 import wandb
 from torchmetrics import PeakSignalNoiseRatio
 from torchvision.transforms import functional
 from typing_extensions import TypedDict
 
 from data.dataloaders import make_train_dataloader, \
-    make_valid_dataloader
+    make_valid_dataloader, make_valid_dataset
 from modules.FFC import LaMa
 from trainer.Losses import LMSELoss
 from utils.htr_logging import get_logger
@@ -31,7 +31,7 @@ def calculate_psnr(predicted: torch.Tensor, ground_truth: torch.Tensor, threshol
 
 class LaMaTrainingModule:
 
-    def __init__(self, config, experiment_name: str, device=None, debug=False, wandb_log=None):
+    def __init__(self, config, device=None, wandb_log=None):
 
         # Batch Size
         self.train_batch_size = config['train_batch_size']
@@ -42,14 +42,13 @@ class LaMaTrainingModule:
         self.valid_split_size = config['valid_split_size']
 
         self.train_data_loader = make_train_dataloader(config)
-        self.valid_data_loader = make_valid_dataloader(config)
+        self.valid_dataset = make_valid_dataset(config)
+        self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
         self.optimizer = None
 
         self.device = device
         self.learning_rate = config['learning_rate']
         self.wandb_log = wandb_log
-
-        self.debug = debug
 
         # TO IMPROVE
         arguments = TypedDict('arguments', {'ratio_gin': float, 'ratio_gout': float})  # REMOVE
@@ -63,7 +62,6 @@ class LaMaTrainingModule:
         # Training
         self.epoch = 0
         self.num_epochs = config['num_epochs']
-        self.experiment_name = experiment_name
         self.kind_loss = config['kind_loss']
 
         # Validation
@@ -72,7 +70,7 @@ class LaMaTrainingModule:
         self.best_psnr = 0
 
         # Logging
-        self.logger = get_logger(LaMaTrainingModule.__name__, debug)
+        self.logger = get_logger(LaMaTrainingModule.__name__)
 
         # Criterion
 
@@ -84,29 +82,27 @@ class LaMaTrainingModule:
 
         if not os.path.exists(path=checkpoints_path):
             self.logger.warning(f"Checkpoints {checkpoints_path} not found.")
-            return
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), checkpoints_path)
 
         checkpoint = torch.load(checkpoints_path, map_location=None)
         self.model.load_state_dict(checkpoint['model'], strict=True)
         self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.epoch = checkpoint['epoch']
         self.best_psnr = checkpoint['best_psnr']
-        self.criterion = checkpoint['criterion']
         self.learning_rate = checkpoint['learning_rate']
         self.logger.info(f"Loaded pretrained checkpoint model from \"{checkpoints_path}\"")
 
-    def save_checkpoints(self, root_folder: str):
+    def save_checkpoints(self, root_folder: str, filename: str):
         os.makedirs(root_folder, exist_ok=True)
         checkpoint = {
             'model': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'epoch': self.epoch,
             'best_psnr': self.best_psnr,
-            'criterion': self.criterion,
             'learning_rate': self.learning_rate,
         }
 
-        dir_path = root_folder + f"{self.experiment_name}_best_psnr.pth"
+        dir_path = root_folder + f"{filename}_best_psnr.pth"
         torch.save(checkpoint, dir_path)
         self.logger.info(f"Stored checkpoints {dir_path}")
 
@@ -123,24 +119,32 @@ class LaMaTrainingModule:
             samples_patches = item['samples_patches']
             gt_sample = item['gt_sample']
 
+            samples_patches = samples_patches.squeeze(0)
             valid = samples_patches.to(self.device)
             gt_valid = gt_sample.to(self.device)
 
             valid = valid.squeeze(0)
-            valid = valid.permute(0, 3, 2, 1)
-
+            valid = valid.permute(1, 0, 2, 3)
             pred = self.model(valid)
-            pred = torchvision.utils.make_grid(pred, nrow=num_rows, padding=0, value_range=(0, 1))
+
+            # Re-construct image
+            pred = self.valid_dataset.reconstruct_image(pred, sample, num_rows)
+            pred = pred.to(self.device)
             pred = functional.rgb_to_grayscale(pred)
-            height, width = gt_valid.shape[3], gt_valid.shape[2]
-            pred = functional.crop(pred, top=0, left=0, height=height, width=width)
-            pred = pred.permute(0, 2, 1).unsqueeze(0)
+
+            # pred = torchvision.utils.make_grid(pred, nrow=num_rows, padding=0, value_range=(0, 1))
+            # pred = functional.rgb_to_grayscale(pred)
+            # height, width = gt_valid.shape[3], gt_valid.shape[2]
+            # pred = functional.crop(pred, top=0, left=0, height=height, width=width)
+            # pred = pred.permute(0, 2, 1).unsqueeze(0)
 
             loss = self.criterion(pred, gt_valid)
             valid_loss += loss.item()
 
             psnr = calculate_psnr(pred, gt_valid)
             total_psnr += psnr
+
+            self.logger.info(f"\tImage: {image_name}\t Loss: {loss.item():0.6f} - PSNR: {psnr:0.6f}")
 
             pred = pred.squeeze(0).detach()
             # pred = torch.clamp(pred, min=0, max=1)
@@ -166,11 +170,6 @@ class LaMaTrainingModule:
 
         avg_psnr = total_psnr / len(self.valid_data_loader)
         avg_loss = valid_loss / len(self.valid_data_loader)
-
-        self.logger.info("Validation info:")
-        self.logger.info(f"\tTotal Loss: {valid_loss:0.6f} - Total PSNR: {total_psnr:0.6f}")
-        self.logger.info(f"\tAverage Loss: {avg_loss:0.6f} - Average PSNR: {avg_psnr:0.6f}")
-        self.logger.info(f"\tBest PSNR: {self.best_psnr:0.6f}")
 
         if self.wandb_log:  # Logs Valid Parameters
             logs = {

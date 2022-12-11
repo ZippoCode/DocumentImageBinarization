@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 import time
 
 import torch
@@ -10,13 +9,7 @@ from trainer.LaMaTrainer import LaMaTrainingModule, calculate_psnr
 from utils.WandbLog import WandbLog
 from utils.htr_logging import get_logger
 
-debug = False
-get_trace = getattr(sys, 'gettrace', None)
-if get_trace():
-    print('Program runs in Debug mode')
-    debug = True
-
-logger = get_logger('main', debug)
+logger = get_logger('main')
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logger.info(f"Using {device} device")
@@ -28,7 +21,7 @@ def train(args, config):
 
     # Configure WandB
     wandb_log = None
-    if not debug:
+    if not args.use_wandb:
         wandb_log = WandbLog(experiment_name=args.experiment_name)
         params = {
             "Learning Rate": config['learning_rate'],
@@ -41,8 +34,7 @@ def train(args, config):
         }
         wandb_log.setup(**params)
 
-    trainer = LaMaTrainingModule(config, debug=debug, device=device, wandb_log=wandb_log,
-                                 experiment_name=args.experiment_name)
+    trainer = LaMaTrainingModule(config, device=device, wandb_log=wandb_log)
     if wandb_log:
         wandb_log.add_watch(trainer.model)
 
@@ -52,7 +44,6 @@ def train(args, config):
     try:
 
         for epoch in range(1, config['num_epochs']):
-
             num_images = 0
 
             if args.train:
@@ -108,17 +99,20 @@ def train(args, config):
             # Validation
             trainer.model.eval()
             with torch.no_grad():
-                psnr, valid_loss, images = trainer.validation()
+                valid_psnr, valid_loss, images = trainer.validation()
+
+                logger.info("Validation info:")
+                logger.info(f"\tAverage Loss: {valid_loss:0.6f} - Average PSNR: {valid_psnr:0.6f}")
 
                 if psnr > trainer.best_psnr:
                     if wandb_log:
                         wandb_log.on_log({'Best PSNR': psnr})
 
-                    trainer.save_checkpoints(config['path_checkpoint'])
+                    trainer.save_checkpoints(root_folder=config['path_checkpoint'], filename=args.experiment_name)
                     trainer.best_psnr = psnr
 
                     # Save images
-                    folder = 'results/' + args.experiment_name + '/'
+                    folder = f'results/training{args.experiment_name}/'
                     os.makedirs(folder, exist_ok=True)
                     for name_image, predicted_image in images.items():
                         path = folder + name_image
@@ -140,6 +134,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-name', '--experiment_name', metavar='<name>', type=str,
                         help=f"The experiment name which will use on WandB", default="debug")
+    parser.add_argument('--use_wandb', type=bool, default=True)
     parser.add_argument('--train', type=bool, default=True)
 
     args = parser.parse_args()
