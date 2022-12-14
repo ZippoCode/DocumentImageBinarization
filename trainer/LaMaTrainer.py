@@ -6,13 +6,14 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.utils.data
+import torchvision
 import wandb
 from torchmetrics import PeakSignalNoiseRatio
 from torchvision.transforms import functional
 from typing_extensions import TypedDict
 
-from data.dataloaders import make_train_dataloader, \
-    make_valid_dataloader, make_valid_dataset
+from data.dataloaders import make_train_dataloader, make_valid_dataloader
+from data.utils import reconstruct_image
 from modules.FFC import LaMa
 from trainer.Losses import LMSELoss
 from utils.htr_logging import get_logger
@@ -33,17 +34,9 @@ class LaMaTrainingModule:
 
     def __init__(self, config, device=None, wandb_log=None):
 
-        # Batch Size
-        self.train_batch_size = config['train_batch_size']
-        self.valid_batch_size = config['valid_batch_size']
-
-        # Split Size
-        self.train_split_size = config['train_split_size']
-        self.valid_split_size = config['valid_split_size']
-
+        self.config = config
         self.train_data_loader = make_train_dataloader(config)
-        self.valid_dataset = make_valid_dataset(config)
-        self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
+        self.valid_data_loader = make_valid_dataloader(config)
         self.optimizer = None
 
         self.device = device
@@ -65,14 +58,11 @@ class LaMaTrainingModule:
         self.kind_loss = config['kind_loss']
 
         # Validation
-        self.psnr_metric = PeakSignalNoiseRatio().to(device=device)
         self.best_epoch = 0
         self.best_psnr = 0
 
         # Logging
         self.logger = get_logger(LaMaTrainingModule.__name__)
-
-        # Criterion
 
         self._create_optimizer()
         self._make_criterion()
@@ -128,27 +118,28 @@ class LaMaTrainingModule:
             pred = self.model(valid)
 
             # Re-construct image
-            pred = self.valid_dataset.reconstruct_image(pred, sample, num_rows)
-            pred = pred.to(self.device)
-            pred = functional.rgb_to_grayscale(pred)
-
-            # pred = torchvision.utils.make_grid(pred, nrow=num_rows, padding=0, value_range=(0, 1))
-            # pred = functional.rgb_to_grayscale(pred)
-            # height, width = gt_valid.shape[3], gt_valid.shape[2]
-            # pred = functional.crop(pred, top=0, left=0, height=height, width=width)
-            # pred = pred.permute(0, 2, 1).unsqueeze(0)
+            if self.config['valid_stride'] == 128:
+                pred = reconstruct_image(pred, sample, num_rows, self.config['valid_split_size'],
+                                         self.config['valid_stride'])
+                pred = pred.to(self.device)
+                pred = functional.rgb_to_grayscale(pred)
+            else:
+                pred = torchvision.utils.make_grid(pred, nrow=num_rows, padding=0, value_range=(0, 1))
+                pred = functional.rgb_to_grayscale(pred)
+                _, _, height, width = gt_valid.shape
+                pred = functional.crop(pred, top=0, left=0, height=height, width=width)
+                pred = pred.unsqueeze(0)
 
             loss = self.criterion(pred, gt_valid)
             valid_loss += loss.item()
 
             psnr = calculate_psnr(pred, gt_valid)
             total_psnr += psnr
-
             self.logger.info(f"\tImage: {image_name}\t Loss: {loss.item():0.6f} - PSNR: {psnr:0.6f}")
 
+            pred = torch.where(pred > threshold, 1., 0.)
             pred = pred.squeeze(0).detach()
             # pred = torch.clamp(pred, min=0, max=1)
-            pred = torch.where(pred > threshold, 1., 0.)
             pred_img = functional.to_pil_image(pred)
             images[image_name] = pred_img
 
@@ -170,13 +161,6 @@ class LaMaTrainingModule:
 
         avg_psnr = total_psnr / len(self.valid_data_loader)
         avg_loss = valid_loss / len(self.valid_data_loader)
-
-        if self.wandb_log:  # Logs Valid Parameters
-            logs = {
-                'valid_avg_loss': avg_loss,
-                'valid_avg_psnr': avg_psnr,
-            }
-            self.wandb_log.on_log(logs)
 
         return avg_psnr, avg_loss, images
 

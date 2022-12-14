@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import time
 
 import torch
@@ -21,7 +22,7 @@ def train(args, config):
 
     # Configure WandB
     wandb_log = None
-    if not args.use_wandb:
+    if args.use_wandb:
         wandb_log = WandbLog(experiment_name=args.experiment_name)
         params = {
             "Learning Rate": config['learning_rate'],
@@ -35,11 +36,11 @@ def train(args, config):
         wandb_log.setup(**params)
 
     trainer = LaMaTrainingModule(config, device=device, wandb_log=wandb_log)
-    if wandb_log:
-        wandb_log.add_watch(trainer.model)
-
     if torch.cuda.is_available():
         trainer.model.cuda()
+
+    if wandb_log:
+        wandb_log.add_watch(trainer.model)
 
     try:
 
@@ -104,12 +105,18 @@ def train(args, config):
                 logger.info("Validation info:")
                 logger.info(f"\tAverage Loss: {valid_loss:0.6f} - Average PSNR: {valid_psnr:0.6f}")
 
-                if psnr > trainer.best_psnr:
-                    if wandb_log:
-                        wandb_log.on_log({'Best PSNR': psnr})
-
+                if args.store and valid_psnr > trainer.best_psnr:
+                    trainer.best_psnr = valid_psnr
+                    logger.info(f"\tBest Loss: {trainer.best_psnr:0.6f}")
                     trainer.save_checkpoints(root_folder=config['path_checkpoint'], filename=args.experiment_name)
-                    trainer.best_psnr = psnr
+
+                    if wandb_log:
+                        logs = {
+                            'Best PSNR': trainer.best_psnr,
+                            'valid_avg_loss': valid_loss,
+                            'valid_avg_psnr': valid_psnr,
+                        }
+                        wandb_log.on_log(logs)
 
                     # Save images
                     folder = f'results/training{args.experiment_name}/'
@@ -136,6 +143,7 @@ if __name__ == '__main__':
                         help=f"The experiment name which will use on WandB", default="debug")
     parser.add_argument('--use_wandb', type=bool, default=True)
     parser.add_argument('--train', type=bool, default=True)
+    parser.add_argument('--store', type=bool, default=True)
 
     args = parser.parse_args()
     config_filename = args.experiment_name
@@ -149,3 +157,4 @@ if __name__ == '__main__':
         file.close()
 
     train(args, train_config)
+    sys.exit()

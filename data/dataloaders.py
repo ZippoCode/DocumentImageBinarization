@@ -97,21 +97,6 @@ def get_transform(transform_variant: str, output_size: int):
     return transform
 
 
-def make_valid_dataset(config: dict):
-    valid_data_path = config['valid_data_path']
-    valid_gt_data_path = config['valid_gt_data_path']
-    logger.info(f"Validation path: \"{valid_data_path}\" - Validation ground truth path: \"{valid_gt_data_path}\"")
-
-    transform = transforms.Compose([transforms.ToTensor()])
-    patch_size = config['valid_split_size']
-    stride = config['valid_stride']
-
-    valid_dataset = ValidationDataset(valid_data_path, valid_gt_data_path, patch_size=patch_size, stride=stride,
-                                      transform=transform)
-    logger.info(f"Validation set has {len(valid_dataset)} instances")
-    return valid_dataset
-
-
 def make_train_dataloader(config: dict, output_size=256):
     train_data_path = config['train_data_path']
     train_gt_data_path = config['train_gt_data_path']
@@ -120,7 +105,6 @@ def make_train_dataloader(config: dict, output_size=256):
 
     transform = get_transform(transform_variant=transform_variant, output_size=output_size)
     train_dataset = TrainingDataset(train_data_path, train_gt_data_path, transform=transform)
-
     train_dataloader_config = config['train_kwargs']
     train_data_loader = torch.utils.data.DataLoader(train_dataset, **train_dataloader_config)
     logger.info(f"Training set has {len(train_dataset)} instances")
@@ -128,9 +112,21 @@ def make_train_dataloader(config: dict, output_size=256):
     return train_data_loader
 
 
-def make_valid_dataloader(valid_dataset: Dataset, config: dict):
+def make_valid_dataloader(config: dict):
+    transform = transforms.Compose([transforms.ToTensor()])
+
+    valid_data_path = config['valid_data_path']
+    valid_gt_data_path = config['valid_gt_data_path']
+    patch_size = config['valid_split_size']
+    stride = config['valid_stride']
+    valid_dataset = ValidationDataset(root_dg_dir=valid_data_path, root_gt_dir=valid_gt_data_path,
+                                      patch_size=patch_size, stride=stride, transform=transform)
     valid_dataloader_config = config['valid_kwargs']
     valid_data_loader = torch.utils.data.DataLoader(valid_dataset, **valid_dataloader_config)
+
+    logger.info(f"Validation paths: Original  \"{valid_data_path}\" - Ground truth: \"{valid_gt_data_path}\"")
+    logger.info(f"Validation dimensions: Patch Size {patch_size} - Stride {stride}")
+    logger.info(f"Validation set has {len(valid_dataset)} instances")
 
     return valid_data_loader
 
@@ -204,10 +200,6 @@ class ValidationDataset(Dataset):
         num_rows = patches.shape[3]
         patches = patches.reshape(batch, channels, -1, self.patch_size, self.patch_size)
 
-        # sample_patches, num_rows, num_cols = get_patches(image_source=sample, patch_size=self.patch_size,
-        #                                                  stride=self.stride)
-        # sample_patches = torch.Tensor(sample_patches) / 255.0
-
         if self.transform:
             sample = self.transform(sample)
             gt_sample = self.transform(gt_sample)
@@ -216,30 +208,8 @@ class ValidationDataset(Dataset):
             'image_name': self.path_images[index],
             'sample': sample,
             'num_rows': num_rows,
-            # 'num_cols': num_cols,
             'samples_patches': patches,
             'gt_sample': gt_sample
         }
 
         return item
-
-    def reconstruct_image(self, patches: torch.Tensor, original: torch.Tensor, num_rows: int, batch=1, channels=1):
-        _, _, width, height = original.shape
-
-        x_steps = [x + (self.stride // 2) for x in range(0, width, self.stride)]
-        x_steps[0], x_steps[-1] = 0, width
-        y_steps = [y + (self.stride // 2) for y in range(0, height, self.stride)]
-        y_steps[0], y_steps[-1] = 0, height
-
-        patches = patches.view(batch, channels, -1, num_rows, self.patch_size, self.patch_size)
-        canvas = torch.zeros_like(original)
-        for j in range(len(x_steps) - 1):
-            for i in range(len(y_steps) - 1):
-                patch = patches[0, :, j, i, :, :]
-                x1_abs, x2_abs = x_steps[j], x_steps[j + 1]
-                y1_abs, y2_abs = y_steps[i], y_steps[i + 1]
-                x1_rel, x2_rel = x1_abs - (j * self.stride), x2_abs - (j * self.stride)
-                y1_rel, y2_rel = y1_abs - (i * self.stride), y2_abs - (i * self.stride)
-                canvas[0, :, x1_abs:x2_abs, y1_abs:y2_abs] = patch[:, x1_rel:x2_rel, y1_rel:y2_rel]
-
-        return canvas
