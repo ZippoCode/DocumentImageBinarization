@@ -114,11 +114,10 @@ def train(args, config):
                                         wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {name_image}")]
                         wandb_log.on_log({"Images": wandb_images})
 
-                    logs = {
+                    wandb_log.on_log({
                         'valid_avg_loss': valid_loss,
                         'valid_avg_psnr': valid_psnr,
-                    }
-                    wandb_log.on_log(logs)
+                    })
 
                 if valid_psnr > trainer.best_psnr:
                     trainer.best_psnr = valid_psnr

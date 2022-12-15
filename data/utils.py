@@ -1,4 +1,99 @@
+import math
+import os
+
+import numpy as np
 import torch
+from PIL import Image
+from torchvision.transforms import transforms
+
+import trainer.CustomTransforms as CustomTransform
+
+
+def get_path(root: str, paths: list, index: int):
+    assert index < len(paths)
+    return os.path.join(root, paths[index])
+
+
+def get_transform(transform_variant: str, output_size: int):
+    if transform_variant == 'default':
+        transform = transforms.Compose([
+            CustomTransform.ColorJitter(brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5),
+            CustomTransform.RandomRotation((0, 360)),
+            CustomTransform.RandomHorizontalFlip(),
+            CustomTransform.RandomVerticalFlip(),
+            CustomTransform.RandomCrop(output_size),
+            CustomTransform.ToTensor()
+        ])
+    elif transform_variant == 'gaussian':
+        transform = transforms.Compose([
+            CustomTransform.ColorJitter(brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5),
+            CustomTransform.GaussianBlur(kernel_size=(3, 5), sigma=(0.3, 1.5)),
+            CustomTransform.RandomRotation((0, 360)),
+            CustomTransform.RandomHorizontalFlip(),
+            CustomTransform.RandomVerticalFlip(),
+            CustomTransform.RandomCrop(output_size),
+            CustomTransform.ToTensor()
+        ])
+    elif transform_variant == 'equalize_contrast':
+        transform = transforms.Compose([
+            CustomTransform.ColorJitter(brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5),
+            CustomTransform.RandomEqualize(),
+            CustomTransform.RandomAutoContrast(),
+            CustomTransform.RandomRotation((0, 360)),
+            CustomTransform.RandomHorizontalFlip(),
+            CustomTransform.RandomVerticalFlip(),
+            CustomTransform.RandomCrop(output_size),
+            CustomTransform.ToTensor()
+        ])
+    elif transform_variant == 'adjust_sharpness':
+        transform = transforms.Compose([
+            CustomTransform.ColorJitter(brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5),
+            CustomTransform.RandomAdjustSharpness(sharpness_factor=0),
+            CustomTransform.RandomRotation((0, 360)),
+            CustomTransform.RandomHorizontalFlip(),
+            CustomTransform.RandomVerticalFlip(),
+            CustomTransform.RandomCrop(output_size),
+            CustomTransform.ToTensor()
+        ])
+    elif transform_variant == 'all_transforms':
+        transform = transforms.Compose([
+            CustomTransform.ColorJitter(brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5),
+            CustomTransform.GaussianBlur(kernel_size=(3, 5), sigma=(0.3, 1.5)),
+            CustomTransform.RandomAdjustSharpness(sharpness_factor=0),
+            CustomTransform.RandomEqualize(),
+            CustomTransform.RandomAutoContrast(),
+            CustomTransform.RandomRotation((0, 360)),
+            CustomTransform.RandomHorizontalFlip(),
+            CustomTransform.RandomVerticalFlip(),
+            CustomTransform.RandomCrop(output_size),
+            CustomTransform.ToTensor()
+        ])
+    else:
+        transform = transforms.Compose([
+            CustomTransform.ToTensor()
+        ])
+    return transform
+
+
+def get_patches(image_source: Image, patch_size: int, stride: int):
+    image = np.asarray(image_source)
+    image_patches = []
+
+    h = ((image.shape[0] // patch_size) + 1) * patch_size
+    w = ((image.shape[1] // patch_size) + 1) * patch_size
+
+    padding_image = np.ones((h, w, 3)) if len(image.shape) == 3 else np.ones((h, w))
+    padding_image = padding_image * 255.0
+    padding_image[:image.shape[0], :image.shape[1]] = image
+
+    for j in range(0, w - patch_size + 1, stride):
+        for i in range(0, h - patch_size + 1, stride):
+            image_patches.append(padding_image[i:i + patch_size, j:j + patch_size])
+
+    num_rows = math.floor((padding_image.shape[0] - patch_size) / stride) + 1
+    num_cols = math.floor((padding_image.shape[1] - patch_size) / stride) + 1
+
+    return np.array(image_patches), num_rows, num_cols
 
 
 def reconstruct_image(patches: torch.Tensor, original: torch.Tensor, num_rows: int, patch_size: int, stride: int,
