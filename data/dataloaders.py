@@ -117,7 +117,7 @@ def make_valid_dataloader(config: dict):
 
     valid_data_path = config['valid_data_path']
     valid_gt_data_path = config['valid_gt_data_path']
-    patch_size = config['valid_split_size']
+    patch_size = config['valid_patch_size']
     stride = config['valid_stride']
     valid_dataset = ValidationDataset(root_dg_dir=valid_data_path, root_gt_dir=valid_gt_data_path,
                                       patch_size=patch_size, stride=stride, transform=transform)

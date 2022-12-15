@@ -7,8 +7,6 @@ import torch
 import torch.optim as optim
 import torch.utils.data
 import torchvision
-import wandb
-from torchmetrics import PeakSignalNoiseRatio
 from torchvision.transforms import functional
 from typing_extensions import TypedDict
 
@@ -32,7 +30,7 @@ def calculate_psnr(predicted: torch.Tensor, ground_truth: torch.Tensor, threshol
 
 class LaMaTrainingModule:
 
-    def __init__(self, config, device=None, wandb_log=None):
+    def __init__(self, config, device=None):
 
         self.config = config
         self.train_data_loader = make_train_dataloader(config)
@@ -40,8 +38,6 @@ class LaMaTrainingModule:
         self.optimizer = None
 
         self.device = device
-        self.learning_rate = config['learning_rate']
-        self.wandb_log = wandb_log
 
         # TO IMPROVE
         arguments = TypedDict('arguments', {'ratio_gin': float, 'ratio_gout': float})  # REMOVE
@@ -56,6 +52,7 @@ class LaMaTrainingModule:
         self.epoch = 0
         self.num_epochs = config['num_epochs']
         self.kind_loss = config['kind_loss']
+        self.learning_rate = config['learning_rate']
 
         # Validation
         self.best_epoch = 0
@@ -99,6 +96,7 @@ class LaMaTrainingModule:
     def validation(self, threshold=0.5):
         total_psnr = 0.0
         valid_loss = 0.0
+
         images = {}
 
         for item in self.valid_data_loader:
@@ -119,7 +117,7 @@ class LaMaTrainingModule:
 
             # Re-construct image
             if self.config['valid_stride'] == 128:
-                pred = reconstruct_image(pred, sample, num_rows, self.config['valid_split_size'],
+                pred = reconstruct_image(pred, sample, num_rows, self.config['valid_patch_size'],
                                          self.config['valid_stride'])
                 pred = pred.to(self.device)
                 pred = functional.rgb_to_grayscale(pred)
@@ -138,26 +136,14 @@ class LaMaTrainingModule:
             self.logger.info(f"\tImage: {image_name}\t Loss: {loss.item():0.6f} - PSNR: {psnr:0.6f}")
 
             pred = torch.where(pred > threshold, 1., 0.)
+
+            valid = sample.squeeze(0).detach()
             pred = pred.squeeze(0).detach()
-            # pred = torch.clamp(pred, min=0, max=1)
+            gt_valid = gt_valid.squeeze(0).detach()
+            valid_img = functional.to_pil_image(valid)
             pred_img = functional.to_pil_image(pred)
-            images[image_name] = pred_img
-
-            if self.wandb_log:
-                valid = sample.squeeze(0).detach()
-                gt_valid = gt_valid.squeeze(0).detach()
-
-                valid_img = functional.to_pil_image(valid)
-                gt_valid_img = functional.to_pil_image(gt_valid)
-
-                wandb_images = [wandb.Image(valid_img, caption=f"Sample: {image_name}"),
-                                wandb.Image(pred_img, caption=f"Predicted Sample: {image_name}"),
-                                wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {image_name}")]
-
-                logs = {
-                    "Images": wandb_images
-                }
-                self.wandb_log.on_log(logs)
+            gt_valid_img = functional.to_pil_image(gt_valid)
+            images[image_name] = [valid_img, pred_img, gt_valid_img]
 
         avg_psnr = total_psnr / len(self.valid_data_loader)
         avg_loss = valid_loss / len(self.valid_data_loader)

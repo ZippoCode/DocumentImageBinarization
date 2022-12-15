@@ -1,14 +1,15 @@
 import argparse
 import os
 import sys
-import time
 
 import torch
+import wandb
 import yaml
+from torchvision.transforms import functional
 
 from trainer.LaMaTrainer import LaMaTrainingModule, calculate_psnr
 from utils.WandbLog import WandbLog
-from utils.htr_logging import get_logger
+from utils.htr_logging import get_logger, DEBUG
 
 logger = get_logger('main')
 
@@ -18,8 +19,6 @@ threshold = 0.5
 
 
 def train(args, config):
-    start_time = time.time()
-
     # Configure WandB
     wandb_log = None
     if args.use_wandb:
@@ -29,13 +28,13 @@ def train(args, config):
             "Epochs": config['num_epochs'],
             "Train Batch Size": config['train_batch_size'],
             "Valid Batch Size": config['valid_batch_size'],
-            "Train Split Size": config['train_split_size'],
-            "Valid Split Size": config['valid_split_size'],
+            "Train Split Size": config['train_patch_size'],
+            "Valid Split Size": config['valid_patch_size'],
             "Architecture": "lama",
         }
         wandb_log.setup(**params)
 
-    trainer = LaMaTrainingModule(config, device=device, wandb_log=wandb_log)
+    trainer = LaMaTrainingModule(config, device=device)
     if torch.cuda.is_available():
         trainer.model.cuda()
 
@@ -45,14 +44,15 @@ def train(args, config):
     try:
 
         for epoch in range(1, config['num_epochs']):
-            num_images = 0
 
             if args.train:
                 logger.info("Start training") if epoch == 1 else None
                 logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}")
 
+                num_images = 0
                 train_loss = 0.0
                 train_psnr = 0.0
+                visualization = torch.zeros((1, config['train_patch_size'], config['train_patch_size']), device=device)
 
                 trainer.model.train()
 
@@ -64,7 +64,9 @@ def train(args, config):
                     pred = trainer.model(inputs)
                     loss = trainer.criterion(pred, outputs)
 
-                    predicted_time = time.time() - start_time
+                    tensor_bin = torch.where(pred > threshold, 1., 0.)
+                    tensor_diff = torch.abs(tensor_bin - outputs)
+                    visualization += torch.sum(tensor_diff, dim=0)
 
                     loss.backward()
                     trainer.optimizer.step()
@@ -72,30 +74,30 @@ def train(args, config):
                     train_loss += loss.item()
                     num_images += len(inputs)
 
-                    # trainer.model.eval()
-                    with torch.no_grad():  # PSNR Train
+                    with torch.no_grad():
                         psnr = calculate_psnr(predicted=pred, ground_truth=outputs, threshold=threshold)
                         train_psnr += psnr
-                        # trainer.model.training()
 
                     if i % 100 == 0:
-                        elapsed_time = time.time() - start_time
                         size = i * len(inputs)
                         all_size = len(trainer.train_data_loader) * len(inputs)
-                        logger.info(
-                            f'Train Loss: {loss.item():0.6f} [{size} / {all_size}] - Epoch: {trainer.epoch + 1}')
-                        logger.info(f'Time {elapsed_time:0.1f}, {predicted_time:0.1f}')
-                        logger.info(f"BATCH shape: {inputs.shape}")
+                        logger.info(f'Train Loss: {loss.item():0.6f} [{size} / {all_size}]')
 
                 avg_train_loss = train_loss / num_images
                 avg_train_psnr = train_psnr / num_images
+                logger.info(f'Average training loss: {avg_train_loss:0.6f} - Average training PSNR: {avg_train_psnr}')
 
                 if wandb_log:
-                    logs = {
+                    # Normalize Visualization
+                    visualization -= visualization.min()
+                    visualization /= visualization.max()
+                    visualization_img = functional.to_pil_image(visualization)
+
+                    wandb_log.on_log({
                         'train_avg_loss': avg_train_loss,
                         'train_avg_psnr': avg_train_psnr,
-                    }
-                    wandb_log.on_log(logs)
+                        'Error Visualization': wandb.Image(visualization_img, caption=f"Patch error")
+                    })
 
             # Validation
             trainer.model.eval()
@@ -105,23 +107,31 @@ def train(args, config):
                 logger.info("Validation info:")
                 logger.info(f"\tAverage Loss: {valid_loss:0.6f} - Average PSNR: {valid_psnr:0.6f}")
 
-                if args.store and valid_psnr > trainer.best_psnr:
+                if wandb_log:
+                    for name_image, (valid_img, pred_img, gt_valid_img) in images.items():
+                        wandb_images = [wandb.Image(valid_img, caption=f"Sample: {name_image}"),
+                                        wandb.Image(pred_img, caption=f"Predicted Sample: {name_image}"),
+                                        wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {name_image}")]
+                        wandb_log.on_log({"Images": wandb_images})
+
+                    logs = {
+                        'valid_avg_loss': valid_loss,
+                        'valid_avg_psnr': valid_psnr,
+                    }
+                    wandb_log.on_log(logs)
+
+                if valid_psnr > trainer.best_psnr:
                     trainer.best_psnr = valid_psnr
                     logger.info(f"\tBest Loss: {trainer.best_psnr:0.6f}")
                     trainer.save_checkpoints(root_folder=config['path_checkpoint'], filename=args.experiment_name)
 
                     if wandb_log:
-                        logs = {
-                            'Best PSNR': trainer.best_psnr,
-                            'valid_avg_loss': valid_loss,
-                            'valid_avg_psnr': valid_psnr,
-                        }
-                        wandb_log.on_log(logs)
+                        wandb_log.on_log({'Best PSNR': trainer.best_psnr})
 
                     # Save images
-                    folder = f'results/training{args.experiment_name}/'
+                    folder = f'results/training/{args.experiment_name}/'
                     os.makedirs(folder, exist_ok=True)
-                    for name_image, predicted_image in images.items():
+                    for name_image, (_, predicted_image, _) in images.items():
                         path = folder + name_image
                         predicted_image.save(path)
                     logger.info("Store predicted images")
@@ -141,9 +151,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-name', '--experiment_name', metavar='<name>', type=str,
                         help=f"The experiment name which will use on WandB", default="debug")
-    parser.add_argument('--use_wandb', type=bool, default=True)
+    parser.add_argument('--use_wandb', type=bool, default=not DEBUG)
     parser.add_argument('--train', type=bool, default=True)
-    parser.add_argument('--store', type=bool, default=True)
 
     args = parser.parse_args()
     config_filename = args.experiment_name
