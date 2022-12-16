@@ -3,8 +3,10 @@
 /weights/
 /results/
 /jobs/
+/runs/
 /.idea/
 /__pycache__/
 *.pyc
 remote_interpreter
-train_lama.sh
+fast_train_lama.sh
+slow_train_lama.sh

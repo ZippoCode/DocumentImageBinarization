@@ -1,6 +1,8 @@
 import argparse
 import os
 import sys
+import time
+from datetime import timedelta
 
 import torch
 import wandb
@@ -18,17 +20,21 @@ logger.info(f"Using {device} device")
 threshold = 0.5
 
 
-def train(args, config):
+def train(config_args, config):
     wandb_log = None
-    if args.use_wandb:  # Configure WandB
-        wandb_log = WandbLog(experiment_name=args.experiment_name)
+    if config_args.use_wandb:  # Configure WandB
+        wandb_log = WandbLog(experiment_name=config_args.experiment_name)
         params = {
             "Learning Rate": config['learning_rate'],
             "Epochs": config['num_epochs'],
             "Train Batch Size": config['train_batch_size'],
             "Valid Batch Size": config['valid_batch_size'],
-            "Train Split Size": config['train_patch_size'],
-            "Valid Split Size": config['valid_patch_size'],
+            "Train Patch Size": config['train_patch_size'],
+            "Valid Patch Size": config['valid_patch_size'],
+            "Valid Stride": config['valid_stride'],
+            # TO BE DELETED
+            "Max Value": args.max_value,
+
             "Architecture": "lama",
         }
         wandb_log.setup(**params)
@@ -41,15 +47,15 @@ def train(args, config):
         wandb_log.add_watch(trainer.model)
 
     try:
+        start_time = time.time()
 
         for epoch in range(1, config['num_epochs']):
             wandb_logs = dict()
 
-            if args.train:
+            if config_args.train:
                 logger.info("Start training") if epoch == 1 else None
                 logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}")
 
-                num_images = 0
                 train_loss = 0.0
                 train_psnr = 0.0
                 visualization = torch.zeros((1, config['train_patch_size'], config['train_patch_size']), device=device)
@@ -72,51 +78,38 @@ def train(args, config):
                     trainer.optimizer.step()
 
                     train_loss += loss.item()
-                    num_images += len(inputs)
 
                     with torch.no_grad():
                         psnr = calculate_psnr(predicted=pred, ground_truth=outputs, threshold=threshold)
                         train_psnr += psnr
 
-                    if batch_idx % 100 == 0:
-                        size = batch_idx * len(inputs)
-                        percentage = 100. * batch_idx / len(trainer.train_data_loader)
-                        logger.info(
-                            f'Train Loss: {loss.item():0.6f} [{size} / {len(trainer.train_data_loader)}] \
-                            ({percentage:.0f}%)')
+                        if batch_idx % config['train_log_every'] == 0:
+                            size = batch_idx * len(inputs)
+                            percentage = 100. * size / len(trainer.train_dataset)
 
-                avg_train_loss = train_loss / num_images
-                avg_train_psnr = train_psnr / num_images
-                logger.info(f'AVG training loss: {avg_train_loss:0.4f} - AVG training PSNR: {avg_train_psnr:0.4f}')
+                            elapsed_time = time.time() - start_time
+                            time_per_iter = elapsed_time / (size + 1)
+                            remaining_time = (len(trainer.train_dataset) - size - 1) * time_per_iter
+                            eta = str(timedelta(seconds=remaining_time))
+
+                            stdout = f"Train Loss: {loss.item():.6f} [{size} / {len(trainer.train_dataset)}]"
+                            stdout += f" ({percentage:.2f}%)  Epoch eta: {eta}"
+                            logger.info(stdout)
+
+                avg_train_loss = train_loss / len(trainer.train_dataset)
+                avg_train_psnr = train_psnr / len(trainer.train_dataset)
+
+                stdout = f"AVG training loss: {avg_train_loss:0.4f} - AVG training PSNR: {avg_train_psnr:0.4f}"
+                logger.info(stdout)
 
                 # Make error images
-                max_value = visualization.max()
-                min_value = visualization.min()
-                mean_value = visualization.mean()
-                std_value = visualization.std()
-
-                zero_one = (visualization - min_value) / max_value  # Normalize 0-1
-                zero_one_img = functional.to_pil_image(zero_one)
-
-                rescaled = (visualization - min_value) / (max_value - min_value)  # Rescaling
+                rescaled = torch.div(visualization, config_args.max_value)
+                rescaled = torch.clamp(rescaled, min=0, max=1)
                 rescaled_img = functional.to_pil_image(rescaled)
 
-                mean_normalized = (visualization - mean_value) / (max_value - min_value)  # Mean Normalization
-                mean_normalized_img = functional.to_pil_image(mean_normalized)
-
-                standardized = (visualization - mean_value) / std_value  # Standardized
-                standardized_img = functional.to_pil_image(standardized)
-
-                # Logs
                 wandb_logs['train_avg_loss'] = avg_train_loss
                 wandb_logs['train_avg_psnr'] = avg_train_psnr
-
-                error_images = [wandb.Image(zero_one_img, caption=f"Normalized 0-1"),
-                                wandb.Image(rescaled_img, caption=f"Rescaled"),
-                                wandb.Image(mean_normalized_img, caption=f"Mean Normalized"),
-                                wandb.Image(standardized_img, caption=f"Standardized"),
-                                ]
-                wandb_logs['Errors'] = error_images
+                wandb_logs['Errors'] = wandb.Image(rescaled_img)
 
             # Validation
             trainer.model.eval()
@@ -134,26 +127,28 @@ def train(args, config):
                 wandb_logs['Results'] = wandb_images
                 wandb_logs['Best PSNR'] = trainer.best_psnr
 
-                logger.info("Validation info:")
-                logger.info(f"\tAVG Validation Loss: {valid_loss:0.4f} - AVG Validation PSNR: {valid_psnr:0.4f}")
-
                 if valid_psnr > trainer.best_psnr:
                     trainer.best_psnr = valid_psnr
-                    logger.info(f"\tBest Loss: {trainer.best_psnr:0.6f}")
-                    trainer.save_checkpoints(root_folder=config['path_checkpoint'], filename=args.experiment_name)
-
                     wandb_logs['Best PSNR'] = trainer.best_psnr
 
+                    trainer.save_checkpoints(root_folder=config['path_checkpoint'],
+                                             filename=config_args.experiment_name)
+
                     # Save images
-                    folder = f'results/training/{args.experiment_name}/'
+                    folder = f'results/training/{config_args.experiment_name}/'
                     os.makedirs(folder, exist_ok=True)
                     for name_image, (_, predicted_image, _) in images.items():
                         path = folder + name_image
                         predicted_image.save(path)
-                    logger.info("Store predicted images")
+                    logger.info("Stored predicted images")
+
+                stdout = f"AVG Validation Loss: {valid_loss:.4f} - AVG Validation PSNR: {valid_psnr:.4f}"
+                stdout += f" Best Loss: {trainer.best_psnr:.3f}"
+                logger.info(stdout)
 
             trainer.epoch += 1
             wandb_logs['epoch'] = trainer.epoch
+            logger.info('-' * 25)
 
             if wandb_log:
                 wandb_log.on_log(wandb_logs)
@@ -171,6 +166,7 @@ if __name__ == '__main__':
                         help=f"The experiment name which will use on WandB", default="debug")
     parser.add_argument('--use_wandb', type=bool, default=not DEBUG)
     parser.add_argument('--train', type=bool, default=True)
+    parser.add_argument('--max_value', type=int, default=100)
 
     args = parser.parse_args()
     config_filename = args.experiment_name

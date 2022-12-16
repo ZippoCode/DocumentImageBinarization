@@ -11,6 +11,7 @@ from torchvision.transforms import functional
 from typing_extensions import TypedDict
 
 from data.dataloaders import make_train_dataloader, make_valid_dataloader
+from data.datasets import make_train_dataset, make_valid_dataset
 from data.utils import reconstruct_image
 from modules.FFC import LaMa
 from trainer.Losses import LMSELoss
@@ -33,8 +34,10 @@ class LaMaTrainingModule:
     def __init__(self, config, device=None):
 
         self.config = config
-        self.train_data_loader = make_train_dataloader(config)
-        self.valid_data_loader = make_valid_dataloader(config)
+        self.train_dataset = make_train_dataset(config)
+        self.valid_dataset = make_valid_dataset(config)
+        self.train_data_loader = make_train_dataloader(self.train_dataset, config)
+        self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
         self.optimizer = None
 
         self.device = device
@@ -133,10 +136,8 @@ class LaMaTrainingModule:
 
             psnr = calculate_psnr(pred, gt_valid)
             total_psnr += psnr
-            self.logger.info(f"\tImage: {image_name}\t Loss: {loss.item():0.6f} - PSNR: {psnr:0.6f}")
 
             pred = torch.where(pred > threshold, 1., 0.)
-
             valid = sample.squeeze(0).detach()
             pred = pred.squeeze(0).detach()
             gt_valid = gt_valid.squeeze(0).detach()
