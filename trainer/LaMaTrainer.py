@@ -15,6 +15,7 @@ from data.datasets import make_train_dataset, make_valid_dataset
 from data.utils import reconstruct_image
 from modules.FFC import LaMa
 from trainer.Losses import LMSELoss
+from trainer.Validator import Validator
 from utils.htr_logging import get_logger
 
 
@@ -101,6 +102,7 @@ class LaMaTrainingModule:
         valid_loss = 0.0
 
         images = {}
+        validator = Validator()
 
         for item in self.valid_data_loader:
 
@@ -134,8 +136,10 @@ class LaMaTrainingModule:
             loss = self.criterion(pred, gt_valid)
             valid_loss += loss.item()
 
-            psnr = calculate_psnr(pred, gt_valid)
-            total_psnr += psnr
+            # psnr = calculate_psnr(pred, gt_valid)
+            # total_psnr += psnr
+
+            validator.run(pred, gt_valid)
 
             pred = torch.where(pred > threshold, 1., 0.)
             valid = sample.squeeze(0).detach()
@@ -146,10 +150,12 @@ class LaMaTrainingModule:
             gt_valid_img = functional.to_pil_image(gt_valid)
             images[image_name] = [valid_img, pred_img, gt_valid_img]
 
-        avg_psnr = total_psnr / len(self.valid_data_loader)
+        # avg_psnr = total_psnr / len(self.valid_data_loader)
         avg_loss = valid_loss / len(self.valid_data_loader)
 
-        return avg_psnr, avg_loss, images
+        avg_psnr, avg_precision, avg_recall = validator.get_metrics()
+
+        return avg_psnr, avg_precision, avg_recall, avg_loss, images
 
     def _create_optimizer(self):
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.95),

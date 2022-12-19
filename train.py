@@ -9,7 +9,8 @@ import wandb
 import yaml
 from torchvision.transforms import functional
 
-from trainer.LaMaTrainer import LaMaTrainingModule, calculate_psnr
+from trainer.LaMaTrainer import LaMaTrainingModule
+from trainer.Validator import Validator
 from utils.WandbLog import WandbLog
 from utils.htr_logging import get_logger, DEBUG
 
@@ -32,9 +33,6 @@ def train(config_args, config):
             "Train Patch Size": config['train_patch_size'],
             "Valid Patch Size": config['valid_patch_size'],
             "Valid Stride": config['valid_stride'],
-            # TO BE DELETED
-            "Max Value": args.max_value,
-
             "Architecture": "lama",
         }
         wandb_log.setup(**params)
@@ -45,6 +43,10 @@ def train(config_args, config):
 
     if wandb_log:
         wandb_log.add_watch(trainer.model)
+
+    # Validator
+    validator = Validator()
+    validator.reset()
 
     try:
         start_time = time.time()
@@ -57,7 +59,6 @@ def train(config_args, config):
                 logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}")
 
                 train_loss = 0.0
-                train_psnr = 0.0
                 visualization = torch.zeros((1, config['train_patch_size'], config['train_patch_size']), device=device)
 
                 trainer.model.train()
@@ -80,8 +81,7 @@ def train(config_args, config):
                     train_loss += loss.item()
 
                     with torch.no_grad():
-                        psnr = calculate_psnr(predicted=pred, ground_truth=outputs, threshold=threshold)
-                        train_psnr += psnr
+                        psnr, precision, recall = validator.run(pred, outputs)
 
                         if batch_idx % config['train_log_every'] == 0:
                             size = batch_idx * len(inputs)
@@ -92,32 +92,47 @@ def train(config_args, config):
                             remaining_time = (len(trainer.train_dataset) - size - 1) * time_per_iter
                             eta = str(timedelta(seconds=remaining_time))
 
-                            stdout = f"Train Loss: {loss.item():.6f} [{size} / {len(trainer.train_dataset)}]"
+                            stdout = f"Train Loss: {loss.item():.6f} - PSNR: {psnr:0.4f} -"
+                            stdout += f" Precision: {100 * precision:0.4f}% - Recall: {100 * recall:0.4f}%"
+                            stdout += f" [{size} / {len(trainer.train_dataset)}]"
                             stdout += f" ({percentage:.2f}%)  Epoch eta: {eta}"
                             logger.info(stdout)
 
                 avg_train_loss = train_loss / len(trainer.train_dataset)
-                avg_train_psnr = train_psnr / len(trainer.train_dataset)
+                avg_train_psnr, avg_train_precision, avg_train_recall = validator.get_metrics()
+                avg_train_precision *= 100.
+                avg_train_recall *= 100.
 
                 stdout = f"AVG training loss: {avg_train_loss:0.4f} - AVG training PSNR: {avg_train_psnr:0.4f}"
+                stdout += f" AVG training precision: {avg_train_precision:0.4f}%"
+                stdout += f" AVG training recall: {avg_train_recall:0.4f}%"
                 logger.info(stdout)
-
-                # Make error images
-                rescaled = torch.div(visualization, config_args.max_value)
-                rescaled = torch.clamp(rescaled, min=0, max=1)
-                rescaled_img = functional.to_pil_image(rescaled)
 
                 wandb_logs['train_avg_loss'] = avg_train_loss
                 wandb_logs['train_avg_psnr'] = avg_train_psnr
+                wandb_logs['train_avg_precision'] = avg_train_precision
+                wandb_logs['train_avg_recall'] = avg_train_recall
+
+                # Make error images
+                rescaled = torch.div(visualization, config['train_max_value'])
+                rescaled = torch.clamp(rescaled, min=0, max=1)
+                rescaled_img = functional.to_pil_image(rescaled)
                 wandb_logs['Errors'] = wandb.Image(rescaled_img)
 
             # Validation
             trainer.model.eval()
+            validator.reset()
+
             with torch.no_grad():
-                valid_psnr, valid_loss, images = trainer.validation()
+                valid_psnr, valid_precision, valid_recall, valid_loss, images = trainer.validation()
+
+                valid_precision *= 100.
+                valid_recall *= 100.
 
                 wandb_logs['valid_avg_loss'] = valid_loss
                 wandb_logs['valid_avg_psnr'] = valid_psnr
+                wandb_logs['valid_avg_precision'] = valid_precision
+                wandb_logs['valid_avg_recall'] = valid_recall
 
                 name_image, (valid_img, pred_img, gt_valid_img) = list(images.items())[0]
                 name_image = name_image
@@ -142,13 +157,14 @@ def train(config_args, config):
                         predicted_image.save(path)
                     logger.info("Stored predicted images")
 
-                stdout = f"AVG Validation Loss: {valid_loss:.4f} - AVG Validation PSNR: {valid_psnr:.4f}"
+                stdout = f"Validation Loss: {valid_loss:.4f} - PSNR: {valid_psnr:.4f}"
+                stdout += f" Precision: {valid_precision:.4f}% - Recall: {valid_recall:.4f}%"
                 stdout += f" Best Loss: {trainer.best_psnr:.3f}"
                 logger.info(stdout)
 
             trainer.epoch += 1
             wandb_logs['epoch'] = trainer.epoch
-            logger.info('-' * 25)
+            logger.info('-' * 75)
 
             if wandb_log:
                 wandb_log.on_log(wandb_logs)
@@ -162,14 +178,15 @@ def train(config_args, config):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-name', '--experiment_name', metavar='<name>', type=str,
+    parser.add_argument('-en', '--experiment_name', metavar='<name>', type=str,
                         help=f"The experiment name which will use on WandB", default="debug")
-    parser.add_argument('--use_wandb', type=bool, default=not DEBUG)
-    parser.add_argument('--train', type=bool, default=True)
-    parser.add_argument('--max_value', type=int, default=100)
+    parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
+                        help=f"The configuration name will use on WandB", default="debug")
+    parser.add_argument('-wdb', '--use_wandb', type=bool, default=not DEBUG)
+    parser.add_argument('-t', '--train', type=bool, default=True)
 
     args = parser.parse_args()
-    config_filename = args.experiment_name
+    config_filename = args.configuration
 
     logger.info("Start process ...")
     configuration_path = f"configs/training/{config_filename}.yaml"
