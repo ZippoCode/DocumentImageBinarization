@@ -44,9 +44,7 @@ def train(config_args, config):
     if wandb_log:
         wandb_log.add_watch(trainer.model)
 
-    # Validator
     validator = Validator()
-    validator.reset()
 
     try:
         start_time = time.time()
@@ -62,6 +60,7 @@ def train(config_args, config):
                 visualization = torch.zeros((1, config['train_patch_size'], config['train_patch_size']), device=device)
 
                 trainer.model.train()
+                validator.reset()
 
                 for batch_idx, (train_in, train_out) in enumerate(trainer.train_data_loader):
                     inputs, outputs = train_in.to(device), train_out.to(device)
@@ -93,15 +92,13 @@ def train(config_args, config):
                             eta = str(timedelta(seconds=remaining_time))
 
                             stdout = f"Train Loss: {loss.item():.6f} - PSNR: {psnr:0.4f} -"
-                            stdout += f" Precision: {100 * precision:0.4f}% - Recall: {100 * recall:0.4f}%"
+                            stdout += f" Precision: {precision:0.4f}% - Recall: {recall:0.4f}%"
                             stdout += f" [{size} / {len(trainer.train_dataset)}]"
                             stdout += f" ({percentage:.2f}%)  Epoch eta: {eta}"
                             logger.info(stdout)
 
                 avg_train_loss = train_loss / len(trainer.train_dataset)
                 avg_train_psnr, avg_train_precision, avg_train_recall = validator.get_metrics()
-                avg_train_precision *= 100.
-                avg_train_recall *= 100.
 
                 stdout = f"AVG training loss: {avg_train_loss:0.4f} - AVG training PSNR: {avg_train_psnr:0.4f}"
                 stdout += f" AVG training precision: {avg_train_precision:0.4f}%"
@@ -126,25 +123,21 @@ def train(config_args, config):
             with torch.no_grad():
                 valid_psnr, valid_precision, valid_recall, valid_loss, images = trainer.validation()
 
-                valid_precision *= 100.
-                valid_recall *= 100.
-
                 wandb_logs['valid_avg_loss'] = valid_loss
                 wandb_logs['valid_avg_psnr'] = valid_psnr
                 wandb_logs['valid_avg_precision'] = valid_precision
                 wandb_logs['valid_avg_recall'] = valid_recall
 
                 name_image, (valid_img, pred_img, gt_valid_img) = list(images.items())[0]
-                name_image = name_image
                 wandb_images = [wandb.Image(valid_img, caption=f"Sample: {name_image}"),
                                 wandb.Image(pred_img, caption=f"Predicted Sample: {name_image}"),
                                 wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {name_image}")]
                 wandb_logs['Results'] = wandb_images
-                wandb_logs['Best PSNR'] = trainer.best_psnr
 
                 if valid_psnr > trainer.best_psnr:
                     trainer.best_psnr = valid_psnr
-                    wandb_logs['Best PSNR'] = trainer.best_psnr
+                    trainer.best_precision = valid_precision
+                    trainer.best_recall = valid_recall
 
                     trainer.save_checkpoints(root_folder=config['path_checkpoint'],
                                              filename=config_args.experiment_name)
@@ -156,6 +149,11 @@ def train(config_args, config):
                         path = folder + name_image
                         predicted_image.save(path)
                     logger.info("Stored predicted images")
+
+                # Log best values
+                wandb_logs['Best PSNR'] = trainer.best_psnr
+                wandb_logs['Best Precision'] = trainer.best_precision
+                wandb_logs['Best Recall'] = trainer.best_recall
 
                 stdout = f"Validation Loss: {valid_loss:.4f} - PSNR: {valid_psnr:.4f}"
                 stdout += f" Precision: {valid_precision:.4f}% - Recall: {valid_recall:.4f}%"

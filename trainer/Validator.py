@@ -38,15 +38,15 @@ class Validator:
         self._recall_value += state.metrics['recall']
 
         avg_psnr = state.metrics['psnr'] / len(predicts)
-        avg_precision = state.metrics['precision'] / len(predicts)
-        avg_recall = state.metrics['recall'] / len(predicts)
+        avg_precision = 100. * state.metrics['precision'] / len(predicts)
+        avg_recall = 100. * state.metrics['recall'] / len(predicts)
 
         return avg_psnr, avg_precision, avg_recall
 
     def get_metrics(self):
         psnr = self._psnr_value / self._count
-        precision = self._precision_value / self._count
-        recall = self._recall_value / self._count
+        precision = 100. * self._precision_value / self._count
+        recall = 100. * self._recall_value / self._count
         return psnr, precision, recall
 
     def reset(self):

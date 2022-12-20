@@ -1,6 +1,6 @@
+import argparse
 import os
 import sys
-import argparse
 
 import torch.utils.data
 import torchvision
@@ -86,7 +86,7 @@ if __name__ == '__main__':
             avg_psnr = total_psnr / len(trainer.valid_data_loader)
             psnr, precision, recall = validator.get_metrics()
             logger.info(f"Average PSNR: {avg_psnr:.6f} - {psnr:.6f}")
-            logger.info(f"Precision {100. * precision:.4f} - Recall {100. * recall:.4f}")
+            logger.info(f"Precision {precision:.4f} - Recall {recall:.4f}")
 
     except KeyboardInterrupt:
         logger.warning("Validation interrupted by user")

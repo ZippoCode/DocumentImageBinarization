@@ -39,7 +39,6 @@ class LaMaTrainingModule:
         self.valid_dataset = make_valid_dataset(config)
         self.train_data_loader = make_train_dataloader(self.train_dataset, config)
         self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
-        self.optimizer = None
 
         self.device = device
 
@@ -57,15 +56,17 @@ class LaMaTrainingModule:
         self.num_epochs = config['num_epochs']
         self.kind_loss = config['kind_loss']
         self.learning_rate = config['learning_rate']
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate, **config['optimizer'])
 
         # Validation
         self.best_epoch = 0
-        self.best_psnr = 0
+        self.best_psnr = 0.
+        self.best_precision = 0.
+        self.best_recall = 0.
 
         # Logging
         self.logger = get_logger(LaMaTrainingModule.__name__)
 
-        self._create_optimizer()
         self._make_criterion()
 
     def load_checkpoints(self, folder: str, filename: str):
@@ -98,7 +99,6 @@ class LaMaTrainingModule:
         self.logger.info(f"Stored checkpoints {dir_path}")
 
     def validation(self, threshold=0.5):
-        total_psnr = 0.0
         valid_loss = 0.0
 
         images = {}
@@ -156,10 +156,6 @@ class LaMaTrainingModule:
         avg_psnr, avg_precision, avg_recall = validator.get_metrics()
 
         return avg_psnr, avg_precision, avg_recall, avg_loss, images
-
-    def _create_optimizer(self):
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate, betas=(0.9, 0.95),
-                                     eps=1e-08, weight_decay=0.05, amsgrad=False)
 
     def _make_criterion(self):
         if self.kind_loss == 'default_mse':
