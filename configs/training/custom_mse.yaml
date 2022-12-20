@@ -19,7 +19,7 @@ train_batch_size: 8
 train_patch_size: 256
 train_log_every: 100
 train_transform_variant: "default"
-train_max_value: 500
+train_max_value: 100
 train_kwargs:
   shuffle: True
   pin_memory: True

@@ -29,7 +29,7 @@ class Validator:
         self._precision_value = 0.0
         self._recall_value = 0.0
 
-    def run(self, predicts: torch.Tensor, targets: torch.Tensor):
+    def compute(self, predicts: torch.Tensor, targets: torch.Tensor):
         state = self._evaluator.run([[predicts, targets]])
 
         self._count += len(predicts)

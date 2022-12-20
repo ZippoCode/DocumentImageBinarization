@@ -80,7 +80,7 @@ def train(config_args, config):
                     train_loss += loss.item()
 
                     with torch.no_grad():
-                        psnr, precision, recall = validator.run(pred, outputs)
+                        psnr, precision, recall = validator.compute(pred, outputs)
 
                         if batch_idx % config['train_log_every'] == 0:
                             size = batch_idx * len(inputs)

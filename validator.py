@@ -7,6 +7,7 @@ import torchvision
 import yaml
 from torchvision.transforms import functional
 
+from data.utils import reconstruct_ground_truth
 from trainer.LaMaTrainer import LaMaTrainingModule, calculate_psnr
 from trainer.Validator import Validator
 from utils.htr_logging import get_logger
@@ -65,16 +66,10 @@ if __name__ == '__main__':
 
                 valid = valid.squeeze(0).permute(1, 0, 2, 3)
                 pred = trainer.model(valid)
-
-                pred = torchvision.utils.make_grid(pred, nrow=num_rows, padding=0, value_range=(0, 1))
-                pred = functional.rgb_to_grayscale(pred)
-                _, _, height, width = gt_valid.shape
-                pred = functional.crop(pred, top=0, left=0, height=height, width=width)
-                pred = pred.unsqueeze(0)
-
+                pred = reconstruct_ground_truth(pred, gt_valid, num_rows=num_rows, config=valid_config)
                 total_psnr += calculate_psnr(pred, gt_valid)
 
-                validator.run(pred, gt_valid)
+                validator.compute(pred, gt_valid)
 
                 # Store images
                 if args.save_images:

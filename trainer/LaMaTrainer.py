@@ -6,13 +6,12 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.utils.data
-import torchvision
 from torchvision.transforms import functional
 from typing_extensions import TypedDict
 
 from data.dataloaders import make_train_dataloader, make_valid_dataloader
 from data.datasets import make_train_dataset, make_valid_dataset
-from data.utils import reconstruct_image
+from data.utils import reconstruct_ground_truth
 from modules.FFC import LaMa
 from trainer.Losses import LMSELoss
 from trainer.Validator import Validator
@@ -105,7 +104,6 @@ class LaMaTrainingModule:
         validator = Validator()
 
         for item in self.valid_data_loader:
-
             image_name = item['image_name'][0]
             sample = item['sample']
             num_rows = item['num_rows'].item()
@@ -120,26 +118,12 @@ class LaMaTrainingModule:
             valid = valid.permute(1, 0, 2, 3)
             pred = self.model(valid)
 
-            # Re-construct image
-            if self.config['valid_stride'] == 128:
-                pred = reconstruct_image(pred, sample, num_rows, self.config['valid_patch_size'],
-                                         self.config['valid_stride'])
-                pred = pred.to(self.device)
-                pred = functional.rgb_to_grayscale(pred)
-            else:
-                pred = torchvision.utils.make_grid(pred, nrow=num_rows, padding=0, value_range=(0, 1))
-                pred = functional.rgb_to_grayscale(pred)
-                _, _, height, width = gt_valid.shape
-                pred = functional.crop(pred, top=0, left=0, height=height, width=width)
-                pred = pred.unsqueeze(0)
+            pred = reconstruct_ground_truth(pred, gt_valid, num_rows=num_rows, config=self.config)
 
             loss = self.criterion(pred, gt_valid)
             valid_loss += loss.item()
 
-            # psnr = calculate_psnr(pred, gt_valid)
-            # total_psnr += psnr
-
-            validator.run(pred, gt_valid)
+            validator.compute(pred, gt_valid)
 
             pred = torch.where(pred > threshold, 1., 0.)
             valid = sample.squeeze(0).detach()
@@ -150,9 +134,7 @@ class LaMaTrainingModule:
             gt_valid_img = functional.to_pil_image(gt_valid)
             images[image_name] = [valid_img, pred_img, gt_valid_img]
 
-        # avg_psnr = total_psnr / len(self.valid_data_loader)
         avg_loss = valid_loss / len(self.valid_data_loader)
-
         avg_psnr, avg_precision, avg_recall = validator.get_metrics()
 
         return avg_psnr, avg_precision, avg_recall, avg_loss, images
