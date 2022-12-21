@@ -70,7 +70,6 @@ class PatchImage:
             logging.error("Keyboard Interrupt: stop running!")
 
     def _split_train_images(self, or_img: np.ndarray, gt_img: np.ndarray, type: str):
-        flag = 1 if type == 'train' else 0
         runtime_size = self.overlap_size if type == "train" else self.patch_size_valid
         patch_size = self.patch_size if type == "train" else self.patch_size_valid
         for i in range(0, or_img.shape[0], runtime_size):
@@ -81,21 +80,21 @@ class PatchImage:
                     gt_patch = gt_img[i:i + patch_size, j:j + patch_size, :]
 
                 elif i + patch_size > or_img.shape[0] and j + patch_size <= or_img.shape[1]:
-                    dg_patch = (np.ones((patch_size, patch_size, 3)) - flag * random.randint(0, 1)) * 255
+                    dg_patch = np.ones((patch_size, patch_size, 3)) * 255
                     gt_patch = np.ones((patch_size, patch_size, 3)) * 255
 
                     dg_patch[0:or_img.shape[0] - i, :, :] = or_img[i:or_img.shape[0], j:j + patch_size, :]
                     gt_patch[0:or_img.shape[0] - i, :, :] = gt_img[i:or_img.shape[0], j:j + patch_size, :]
 
                 elif i + patch_size <= or_img.shape[0] and j + patch_size > or_img.shape[1]:
-                    dg_patch = (np.ones((patch_size, patch_size, 3)) - flag * random.randint(0, 1)) * 255
+                    dg_patch = np.ones((patch_size, patch_size, 3)) * 255
                     gt_patch = np.ones((patch_size, patch_size, 3)) * 255
 
                     dg_patch[:, 0:or_img.shape[1] - j, :] = or_img[i:i + patch_size, j:or_img.shape[1], :]
                     gt_patch[:, 0:or_img.shape[1] - j, :] = gt_img[i:i + patch_size, j:or_img.shape[1], :]
 
                 else:
-                    dg_patch = (np.ones((patch_size, patch_size, 3)) - flag * random.randint(0, 1)) * 255
+                    dg_patch = np.ones((patch_size, patch_size, 3)) * 255
                     gt_patch = np.ones((patch_size, patch_size, 3)) * 255
 
                     dg_patch[0:or_img.shape[0] - i, 0:or_img.shape[1] - j, :] = or_img[i:or_img.shape[0],

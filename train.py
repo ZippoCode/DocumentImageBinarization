@@ -1,9 +1,11 @@
 import argparse
 import os
+import random
 import sys
 import time
 from datetime import timedelta
 
+import numpy as np
 import torch
 import wandb
 import yaml
@@ -58,6 +60,10 @@ def train(config_args, config):
 
                 train_loss = 0.0
                 visualization = torch.zeros((1, config['train_patch_size'], config['train_patch_size']), device=device)
+                training_images = {
+                    'samples': [],
+                    'ground_truth': []
+                }
 
                 trainer.model.train()
                 validator.reset()
@@ -93,9 +99,13 @@ def train(config_args, config):
 
                             stdout = f"Train Loss: {loss.item():.6f} - PSNR: {psnr:0.4f} -"
                             stdout += f" Precision: {precision:0.4f}% - Recall: {recall:0.4f}%"
-                            stdout += f" [{size} / {len(trainer.train_dataset)}]"
+                            stdout += f" \t[{size} / {len(trainer.train_dataset)}]"
                             stdout += f" ({percentage:.2f}%)  Epoch eta: {eta}"
                             logger.info(stdout)
+
+                            for b in range(len(inputs)):
+                                training_images['samples'].append(wandb.Image(functional.to_pil_image(inputs[b])))
+                                training_images['ground_truth'].append(wandb.Image(functional.to_pil_image(outputs[b])))
 
                 avg_train_loss = train_loss / len(trainer.train_dataset)
                 avg_train_psnr, avg_train_precision, avg_train_recall = validator.get_metrics()
@@ -109,6 +119,8 @@ def train(config_args, config):
                 wandb_logs['train_avg_psnr'] = avg_train_psnr
                 wandb_logs['train_avg_precision'] = avg_train_precision
                 wandb_logs['train_avg_recall'] = avg_train_recall
+                wandb_logs['Random Samples'] = [random.choices(training_images['samples'], k=4),
+                                                random.choices(training_images['ground_truth'], k=4)]
 
                 # Make error images
                 rescaled = torch.div(visualization, config['train_max_value'])
@@ -173,6 +185,13 @@ def train(config_args, config):
         logger.error(f"Training failed due to {e}")
 
 
+def random_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -193,6 +212,8 @@ if __name__ == '__main__':
     with open(configuration_path) as file:
         train_config = yaml.load(file, Loader=yaml.Loader)
         file.close()
+
+    random_seed(train_config['seed'])
 
     train(args, train_config)
     sys.exit()

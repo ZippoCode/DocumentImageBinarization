@@ -7,7 +7,7 @@ from PIL import Image
 from torchvision.transforms import transforms, functional
 from torchvision.utils import make_grid
 
-import trainer.CustomTransforms as CustomTransform
+import data.CustomTransforms as CustomTransform
 
 
 def get_path(root: str, paths: list, index: int):

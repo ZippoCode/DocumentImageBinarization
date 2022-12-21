@@ -5,6 +5,7 @@ kind_loss: "custom_mse"
 num_epochs: 150
 path_checkpoint: 'weights/'
 learning_rate: 1.5e-4
+seed: 987
 
 optimizer:
   betas: [0.9, 0.95]
@@ -19,7 +20,7 @@ train_batch_size: 8
 train_patch_size: 256
 train_log_every: 100
 train_transform_variant: "default"
-train_max_value: 100
+train_max_value: 1000
 train_kwargs:
   shuffle: True
   pin_memory: True

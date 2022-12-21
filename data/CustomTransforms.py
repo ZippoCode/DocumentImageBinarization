@@ -60,7 +60,9 @@ class RandomRotation(transforms.RandomRotation):
     def __call__(self, sample):
         image, gt = sample['image'], sample['gt']
         angle = self.get_params(self.degrees)
-        image = functional.rotate(image, angle)
+
+        image = functional.rotate(image, angle, fill=[255, 255, 255])
+
         gt = functional.invert(gt)
         gt = functional.rotate(gt, angle)
         gt = functional.invert(gt)
