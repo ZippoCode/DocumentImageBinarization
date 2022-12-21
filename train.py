@@ -60,10 +60,7 @@ def train(config_args, config):
 
                 train_loss = 0.0
                 visualization = torch.zeros((1, config['train_patch_size'], config['train_patch_size']), device=device)
-                training_images = {
-                    'samples': [],
-                    'ground_truth': []
-                }
+                training_images = []
 
                 trainer.model.train()
                 validator.reset()
@@ -73,10 +70,10 @@ def train(config_args, config):
 
                     trainer.optimizer.zero_grad()
 
-                    pred = trainer.model(inputs)
-                    loss = trainer.criterion(pred, outputs)
+                    predictions = trainer.model(inputs)
+                    loss = trainer.criterion(predictions, outputs)
 
-                    tensor_bin = torch.where(pred > threshold, 1., 0.)
+                    tensor_bin = torch.where(predictions > threshold, 1., 0.)
                     tensor_diff = torch.abs(tensor_bin - outputs)
                     visualization += torch.sum(tensor_diff, dim=0)
 
@@ -86,7 +83,7 @@ def train(config_args, config):
                     train_loss += loss.item()
 
                     with torch.no_grad():
-                        psnr, precision, recall = validator.compute(pred, outputs)
+                        psnr, precision, recall = validator.compute(predictions, outputs)
 
                         if batch_idx % config['train_log_every'] == 0:
                             size = batch_idx * len(inputs)
@@ -104,8 +101,11 @@ def train(config_args, config):
                             logger.info(stdout)
 
                             for b in range(len(inputs)):
-                                training_images['samples'].append(wandb.Image(functional.to_pil_image(inputs[b])))
-                                training_images['ground_truth'].append(wandb.Image(functional.to_pil_image(outputs[b])))
+                                original = inputs[b]
+                                pred = predictions[b].expand(3, -1, -1)
+                                output = outputs[b].expand(3, -1, -1)
+                                union = torch.cat((original, pred, output), 2)
+                                training_images.append(wandb.Image(functional.to_pil_image(union), caption=f"Es. {b}"))
 
                 avg_train_loss = train_loss / len(trainer.train_dataset)
                 avg_train_psnr, avg_train_precision, avg_train_recall = validator.get_metrics()
@@ -119,35 +119,33 @@ def train(config_args, config):
                 wandb_logs['train_avg_psnr'] = avg_train_psnr
                 wandb_logs['train_avg_precision'] = avg_train_precision
                 wandb_logs['train_avg_recall'] = avg_train_recall
-                wandb_logs['Random Samples'] = [random.choices(training_images['samples'], k=4),
-                                                random.choices(training_images['ground_truth'], k=4)]
+                wandb_logs['Random Sample'] = random.choices(training_images, k=5)
 
                 # Make error images
                 rescaled = torch.div(visualization, config['train_max_value'])
                 rescaled = torch.clamp(rescaled, min=0, max=1)
-                rescaled_img = functional.to_pil_image(rescaled)
-                wandb_logs['Errors'] = wandb.Image(rescaled_img)
+                wandb_logs['Errors'] = wandb.Image(functional.to_pil_image(rescaled))
 
-            # Validation
-            trainer.model.eval()
-            validator.reset()
+                # Validation
+                trainer.model.eval()
+                validator.reset()
 
-            with torch.no_grad():
-                valid_psnr, valid_precision, valid_recall, valid_loss, images = trainer.validation()
+                with torch.no_grad():
+                    valid_psnr, valid_precision, valid_recall, valid_loss, images = trainer.validation()
 
-                wandb_logs['valid_avg_loss'] = valid_loss
-                wandb_logs['valid_avg_psnr'] = valid_psnr
-                wandb_logs['valid_avg_precision'] = valid_precision
-                wandb_logs['valid_avg_recall'] = valid_recall
+                    name_image, (valid_img, pred_img, gt_valid_img) = list(images.items())[0]
 
-                name_image, (valid_img, pred_img, gt_valid_img) = list(images.items())[0]
-                wandb_images = [wandb.Image(valid_img, caption=f"Sample: {name_image}"),
-                                wandb.Image(pred_img, caption=f"Predicted Sample: {name_image}"),
-                                wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {name_image}")]
-                wandb_logs['Results'] = wandb_images
+                    wandb_logs['valid_avg_loss'] = valid_loss
+                    wandb_logs['valid_avg_psnr'] = valid_psnr
+                    wandb_logs['valid_avg_precision'] = valid_precision
+                    wandb_logs['valid_avg_recall'] = valid_recall
 
-                if valid_psnr > trainer.best_psnr:
-                    trainer.best_psnr = valid_psnr
+                    wandb_logs['Results'] = [wandb.Image(valid_img, caption=f"Sample: {name_image}"),
+                                             wandb.Image(pred_img, caption=f"Predicted Sample: {name_image}"),
+                                             wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {name_image}")]
+
+                    if valid_psnr > trainer.best_psnr:
+                        trainer.best_psnr = valid_psnr
                     trainer.best_precision = valid_precision
                     trainer.best_recall = valid_recall
 
@@ -159,7 +157,7 @@ def train(config_args, config):
                     os.makedirs(folder, exist_ok=True)
                     for name_image, (_, predicted_image, _) in images.items():
                         path = folder + name_image
-                        predicted_image.save(path)
+                    predicted_image.save(path)
                     logger.info("Stored predicted images")
 
                 # Log best values
@@ -172,12 +170,12 @@ def train(config_args, config):
                 stdout += f" Best Loss: {trainer.best_psnr:.3f}"
                 logger.info(stdout)
 
-            trainer.epoch += 1
-            wandb_logs['epoch'] = trainer.epoch
-            logger.info('-' * 75)
+                trainer.epoch += 1
+                wandb_logs['epoch'] = trainer.epoch
+                logger.info('-' * 75)
 
-            if wandb_log:
-                wandb_log.on_log(wandb_logs)
+                if wandb_log:
+                    wandb_log.on_log(wandb_logs)
 
     except KeyboardInterrupt:
         logger.warning("Training interrupted by user")
