@@ -15,6 +15,7 @@ from trainer.LaMaTrainer import LaMaTrainingModule
 from trainer.Validator import Validator
 from utils.WandbLog import WandbLog
 from utils.htr_logging import get_logger, DEBUG
+from utils.ioutils import store_images
 
 logger = get_logger('main')
 
@@ -105,7 +106,7 @@ def train(config_args, config):
                                 pred = predictions[b].expand(3, -1, -1)
                                 output = outputs[b].expand(3, -1, -1)
                                 union = torch.cat((original, pred, output), 2)
-                                training_images.append(wandb.Image(functional.to_pil_image(union), caption=f"Es. {b}"))
+                                training_images.append(wandb.Image(functional.to_pil_image(union), caption=f"Example"))
 
                 avg_train_loss = train_loss / len(trainer.train_dataset)
                 avg_train_psnr, avg_train_precision, avg_train_recall = validator.get_metrics()
@@ -123,7 +124,7 @@ def train(config_args, config):
 
                 # Make error images
                 rescaled = torch.div(visualization, config['train_max_value'])
-                rescaled = torch.clamp(rescaled, min=0, max=1)
+                rescaled = torch.clamp(rescaled, min=0., max=1.)
                 wandb_logs['Errors'] = wandb.Image(functional.to_pil_image(rescaled))
 
                 # Validation
@@ -146,19 +147,17 @@ def train(config_args, config):
 
                     if valid_psnr > trainer.best_psnr:
                         trainer.best_psnr = valid_psnr
-                    trainer.best_precision = valid_precision
-                    trainer.best_recall = valid_recall
+                        trainer.best_precision = valid_precision
+                        trainer.best_recall = valid_recall
 
-                    trainer.save_checkpoints(root_folder=config['path_checkpoint'],
-                                             filename=config_args.experiment_name)
+                        trainer.save_checkpoints(root_folder=config['path_checkpoint'],
+                                                 filename=config_args.experiment_name)
 
-                    # Save images
-                    folder = f'results/training/{config_args.experiment_name}/'
-                    os.makedirs(folder, exist_ok=True)
-                    for name_image, (_, predicted_image, _) in images.items():
-                        path = folder + name_image
-                    predicted_image.save(path)
-                    logger.info("Stored predicted images")
+                        # Save images
+                        names = images.keys()
+                        predicted_images = [item[1] for item in list(images.values())]
+                        store_images(root='results/training', folder=config_args.experiment_name, names=names,
+                                     images=predicted_images)
 
                 # Log best values
                 wandb_logs['Best PSNR'] = trainer.best_psnr

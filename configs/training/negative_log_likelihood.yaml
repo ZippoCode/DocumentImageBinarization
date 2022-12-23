@@ -1,11 +1,11 @@
 input_channels: 3
 output_channels: 1
 
-kind_loss: "custom_mse"
+kind_loss: "negative_log_likelihood"
 num_epochs: 150
 path_checkpoint: 'weights/'
 learning_rate: 1.5e-4
-seed: 987
+seed: 110
 
 optimizer:
   betas: [0.9, 0.95]
@@ -24,8 +24,8 @@ train_max_value: 500
 train_kwargs:
   shuffle: True
   pin_memory: True
-  batch_size: 4
-  num_workers: 1
+  batch_size: 8
+  num_workers: 2
 
 # Valid configuration
 valid_data_path: "patches/valid"
@@ -37,4 +37,4 @@ valid_kwargs:
   shuffle: False
   pin_memory: True
   batch_size: 1
-  num_workers: 1
+  num_workers: 2

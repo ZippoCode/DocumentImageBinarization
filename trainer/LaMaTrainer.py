@@ -13,7 +13,7 @@ from data.dataloaders import make_train_dataloader, make_valid_dataloader
 from data.datasets import make_train_dataset, make_valid_dataset
 from data.utils import reconstruct_ground_truth
 from modules.FFC import LaMa
-from trainer.Losses import LMSELoss
+from trainer.Losses import LMSELoss, make_criterion
 from trainer.Validator import Validator
 from utils.htr_logging import get_logger
 
@@ -34,12 +34,13 @@ class LaMaTrainingModule:
     def __init__(self, config, device=None):
 
         self.config = config
+        self.device = device
+
         self.train_dataset = make_train_dataset(config)
         self.valid_dataset = make_valid_dataset(config)
         self.train_data_loader = make_train_dataloader(self.train_dataset, config)
         self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
-
-        self.device = device
+        self.criterion = make_criterion(kind=config['kind_loss']).to(device=device)
 
         # TO IMPROVE
         arguments = TypedDict('arguments', {'ratio_gin': float, 'ratio_gout': float})  # REMOVE
@@ -53,7 +54,6 @@ class LaMaTrainingModule:
         # Training
         self.epoch = 0
         self.num_epochs = config['num_epochs']
-        self.kind_loss = config['kind_loss']
         self.learning_rate = config['learning_rate']
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate, **config['optimizer'])
 
@@ -65,8 +65,6 @@ class LaMaTrainingModule:
 
         # Logging
         self.logger = get_logger(LaMaTrainingModule.__name__)
-
-        self._make_criterion()
 
     def load_checkpoints(self, folder: str, filename: str):
         checkpoints_path = f"{folder}{filename}_best_psnr.pth"
@@ -138,9 +136,3 @@ class LaMaTrainingModule:
         avg_psnr, avg_precision, avg_recall = validator.get_metrics()
 
         return avg_psnr, avg_precision, avg_recall, avg_loss, images
-
-    def _make_criterion(self):
-        if self.kind_loss == 'default_mse':
-            self.criterion = torch.nn.MSELoss().to(self.device)
-        else:
-            self.criterion = LMSELoss().to(self.device)
