@@ -1,7 +1,9 @@
 input_channels: 3
 output_channels: 1
 
-kind_loss: "binary_classification"
+kind_loss: "binary_cross_entropy"
+kind_optimizer: "Adam"
+
 num_epochs: 150
 path_checkpoint: 'weights/'
 learning_rate: 1.5e-4

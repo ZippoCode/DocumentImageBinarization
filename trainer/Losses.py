@@ -8,7 +8,7 @@ def make_criterion(kind: str):
         criterion = torch.nn.CrossEntropyLoss()
     elif kind == 'negative_log_likelihood':
         criterion = torch.nn.NLLLoss()
-    elif kind == 'binary_classification':
+    elif kind == 'binary_cross_entropy':
         criterion = torch.nn.BCEWithLogitsLoss()
     else:
         criterion = LMSELoss()

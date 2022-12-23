@@ -4,7 +4,6 @@ import os
 
 import numpy as np
 import torch
-import torch.optim as optim
 import torch.utils.data
 from torchvision.transforms import functional
 from typing_extensions import TypedDict
@@ -13,7 +12,8 @@ from data.dataloaders import make_train_dataloader, make_valid_dataloader
 from data.datasets import make_train_dataset, make_valid_dataset
 from data.utils import reconstruct_ground_truth
 from modules.FFC import LaMa
-from trainer.Losses import LMSELoss, make_criterion
+from trainer.Losses import make_criterion
+from trainer.Optimizers import make_optimizer
 from trainer.Validator import Validator
 from utils.htr_logging import get_logger
 
@@ -40,7 +40,6 @@ class LaMaTrainingModule:
         self.valid_dataset = make_valid_dataset(config)
         self.train_data_loader = make_train_dataloader(self.train_dataset, config)
         self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
-        self.criterion = make_criterion(kind=config['kind_loss']).to(device=device)
 
         # TO IMPROVE
         arguments = TypedDict('arguments', {'ratio_gin': float, 'ratio_gout': float})  # REMOVE
@@ -55,7 +54,8 @@ class LaMaTrainingModule:
         self.epoch = 0
         self.num_epochs = config['num_epochs']
         self.learning_rate = config['learning_rate']
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=self.learning_rate, **config['optimizer'])
+        self.optimizer = make_optimizer(self.model, self.learning_rate, config['kind_optimizer'], config['optimizer'])
+        self.criterion = make_criterion(kind=config['kind_loss']).to(device=device)
 
         # Validation
         self.best_epoch = 0
