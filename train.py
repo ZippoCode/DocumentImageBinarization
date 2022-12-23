@@ -134,13 +134,12 @@ def train(config_args, config):
                 with torch.no_grad():
                     valid_psnr, valid_precision, valid_recall, valid_loss, images = trainer.validation()
 
-                    name_image, (valid_img, pred_img, gt_valid_img) = list(images.items())[0]
-
                     wandb_logs['valid_avg_loss'] = valid_loss
                     wandb_logs['valid_avg_psnr'] = valid_psnr
                     wandb_logs['valid_avg_precision'] = valid_precision
                     wandb_logs['valid_avg_recall'] = valid_recall
 
+                    name_image, (valid_img, pred_img, gt_valid_img) = list(images.items())[0]
                     wandb_logs['Results'] = [wandb.Image(valid_img, caption=f"Sample: {name_image}"),
                                              wandb.Image(pred_img, caption=f"Predicted Sample: {name_image}"),
                                              wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {name_image}")]
@@ -156,8 +155,8 @@ def train(config_args, config):
                         # Save images
                         names = images.keys()
                         predicted_images = [item[1] for item in list(images.values())]
-                        store_images(root='results/training', folder=config_args.experiment_name, names=names,
-                                     images=predicted_images)
+                        store_images(parent_directory='results/training', directory=config_args.experiment_name,
+                                     names=names, images=predicted_images)
 
                 # Log best values
                 wandb_logs['Best PSNR'] = trainer.best_psnr

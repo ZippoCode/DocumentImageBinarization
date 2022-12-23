@@ -1,9 +1,7 @@
 import argparse
-import os
 import sys
 
 import torch.utils.data
-import torchvision
 import yaml
 from torchvision.transforms import functional
 
@@ -11,6 +9,7 @@ from data.utils import reconstruct_ground_truth
 from trainer.LaMaTrainer import LaMaTrainingModule, calculate_psnr
 from trainer.Validator import Validator
 from utils.htr_logging import get_logger
+from utils.ioutils import store_images
 
 logger = get_logger('main')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -20,7 +19,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-s', '--save_images', metavar='True or False', type=bool,
-                        help=f"If TRUE will be saved the result images", default=False)
+                        help=f"If TRUE will be saved the result images", default=True)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use during running", default="evaluation_custom_mse")
 
@@ -34,9 +33,6 @@ if __name__ == '__main__':
             valid_config = yaml.load(file, Loader=yaml.Loader)
             file.close()
             logger.info(f"Loaded \"{configuration_path}\" configuration file")
-
-        folder = f'results/evaluation/{valid_config["filename_checkpoint"]}/'
-        os.makedirs(folder, exist_ok=True)
 
         trainer = LaMaTrainingModule(valid_config, device=device)
         trainer.load_checkpoints(valid_config['path_checkpoint'], valid_config["filename_checkpoint"])
@@ -52,6 +48,7 @@ if __name__ == '__main__':
         with torch.no_grad():
 
             total_psnr = 0.0
+            names, images = [], []
 
             for item in trainer.valid_data_loader:
                 image_name = item['image_name'][0]
@@ -71,17 +68,19 @@ if __name__ == '__main__':
 
                 validator.compute(pred, gt_valid)
 
-                # Store images
-                if args.save_images:
-                    pred = pred.squeeze(0).detach()
-                    pred_img = functional.to_pil_image(pred)
-                    path = folder + image_name
-                    pred_img.save(path)
+                pred = pred.squeeze(0).detach()
+                pred_img = functional.to_pil_image(pred)
+                names.append(image_name)
+                images.append(pred_img)
 
             avg_psnr = total_psnr / len(trainer.valid_data_loader)
             psnr, precision, recall = validator.get_metrics()
             logger.info(f"Average PSNR: {avg_psnr:.6f} - {psnr:.6f}")
             logger.info(f"Precision {precision:.4f} - Recall {recall:.4f}")
+
+            if args.save_images:
+                store_images(parent_directory='results/evaluation', directory=valid_config["filename_checkpoint"],
+                             names=names, images=images)
 
     except KeyboardInterrupt:
         logger.warning("Validation interrupted by user")
