@@ -21,7 +21,6 @@ logger = get_logger('main')
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logger.info(f"Using {device} device")
-threshold = 0.5
 
 
 def train(config_args, config):
@@ -29,14 +28,20 @@ def train(config_args, config):
     if config_args.use_wandb:  # Configure WandB
         wandb_log = WandbLog(experiment_name=config_args.experiment_name)
         params = {
+            "Architecture": "lama",
+
             "Learning Rate": config['learning_rate'],
             "Epochs": config['num_epochs'],
+
             "Train Batch Size": config['train_batch_size'],
             "Valid Batch Size": config['valid_batch_size'],
             "Train Patch Size": config['train_patch_size'],
             "Valid Patch Size": config['valid_patch_size'],
             "Valid Stride": config['valid_stride'],
-            "Architecture": "lama",
+
+            "Loss": config['kind_loss'],
+            "Optimizer": config['kind_optimizer'],
+            "Transform Variant": config['train_transform_variant'],
         }
         wandb_log.setup(**params)
 
@@ -51,12 +56,14 @@ def train(config_args, config):
 
     try:
         start_time = time.time()
+        threshold = config['threshold'] if config['threshold'] else 0.5
+        patience = 30
 
         for epoch in range(1, config['num_epochs']):
             wandb_logs = dict()
 
             if config_args.train:
-                logger.info("Start training") if epoch == 1 else None
+                logger.info("Training has been started") if epoch == 1 else None
                 logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}")
 
                 train_loss = 0.0
@@ -70,18 +77,16 @@ def train(config_args, config):
                     inputs, outputs = train_in.to(device), train_out.to(device)
 
                     trainer.optimizer.zero_grad()
-
                     predictions = trainer.model(inputs)
                     loss = trainer.criterion(predictions, outputs)
-
-                    tensor_bin = torch.where(predictions > threshold, 1., 0.)
-                    tensor_diff = torch.abs(tensor_bin - outputs)
-                    visualization += torch.sum(tensor_diff, dim=0)
-
                     loss.backward()
                     trainer.optimizer.step()
 
                     train_loss += loss.item()
+
+                    tensor_bin = torch.where(predictions > threshold, 1., 0.)
+                    tensor_diff = torch.abs(tensor_bin - outputs)
+                    visualization += torch.sum(tensor_diff, dim=0)
 
                     with torch.no_grad():
                         psnr, precision, recall = validator.compute(predictions, outputs)
@@ -145,6 +150,7 @@ def train(config_args, config):
                                              wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {name_image}")]
 
                     if valid_psnr > trainer.best_psnr:
+                        patience = 30
                         trainer.best_psnr = valid_psnr
                         trainer.best_precision = valid_precision
                         trainer.best_recall = valid_recall
@@ -157,6 +163,8 @@ def train(config_args, config):
                         predicted_images = [item[1] for item in list(images.values())]
                         store_images(parent_directory='results/training', directory=config_args.experiment_name,
                                      names=names, images=predicted_images)
+                    else:
+                        patience -= 1
 
                 # Log best values
                 wandb_logs['Best PSNR'] = trainer.best_psnr
@@ -174,6 +182,12 @@ def train(config_args, config):
 
                 if wandb_log:
                     wandb_log.on_log(wandb_logs)
+
+                if patience == 0:
+                    stdout = "There has been no update of Best PSNR value in the last 30 epochs."
+                    stdout += " Training will be stopped."
+                    logger.info(stdout)
+                    sys.exit()
 
     except KeyboardInterrupt:
         logger.warning("Training interrupted by user")
