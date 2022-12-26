@@ -41,14 +41,10 @@ class LaMaTrainingModule:
         self.train_data_loader = make_train_dataloader(self.train_dataset, config)
         self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
 
-        # TO IMPROVE
-        arguments = TypedDict('arguments', {'ratio_gin': float, 'ratio_gout': float})  # REMOVE
-        init_conv_kwargs: arguments = {'ratio_gin': 0, 'ratio_gout': 0}  # REMOVE
-        down_sample_conv_kwargs: arguments = {'ratio_gin': 0, 'ratio_gout': 0}  # REMOVE
-        resnet_conv_kwargs: arguments = {'ratio_gin': 0.75, 'ratio_gout': 0.75}  # REMOVE
         self.model = LaMa(input_nc=config['input_channels'], output_nc=config['output_channels'],
-                          init_conv_kwargs=init_conv_kwargs, downsample_conv_kwargs=down_sample_conv_kwargs,
-                          resnet_conv_kwargs=resnet_conv_kwargs)
+                          init_conv_kwargs=config['init_conv_kwargs'],
+                          downsample_conv_kwargs=config['down_sample_conv_kwargs'],
+                          resnet_conv_kwargs=config['resnet_conv_kwargs'])
 
         # Training
         self.epoch = 0

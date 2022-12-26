@@ -18,6 +18,18 @@ optimizer:
   weight_decay: 0.05
   amsgrad: False
 
+# LaMa Configuration
+init_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+down_sample_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+resnet_conv_kwargs:
+  ratio_gin: 0.75
+  ratio_gout: 0.75
+
+
 # Train configuration
 train_data_path: "patches/train"
 train_gt_data_path: "patches/train_gt"
@@ -30,6 +42,7 @@ train_kwargs:
   pin_memory: True
   batch_size: 8
   num_workers: 2
+
 
 # Valid configuration
 valid_data_path: "patches/valid"

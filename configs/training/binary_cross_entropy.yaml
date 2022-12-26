@@ -2,7 +2,7 @@ input_channels: 3
 output_channels: 1
 
 kind_loss: "binary_cross_entropy"
-kind_optimizer: "Adam"
+kind_optimizer: "AdamW"
 
 num_epochs: 150
 path_checkpoint: 'weights/'
@@ -17,6 +17,19 @@ optimizer:
   weight_decay: 0.05
   amsgrad: False
 
+
+# LaMa Configuration
+init_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+down_sample_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+resnet_conv_kwargs:
+  ratio_gin: 0.75
+  ratio_gout: 0.75
+
+
 # Train configuration
 train_data_path: "patches/train"
 train_gt_data_path: "patches/train_gt"
@@ -30,6 +43,7 @@ train_kwargs:
   pin_memory: True
   batch_size: 8
   num_workers: 2
+
 
 # Valid configuration
 valid_data_path: "patches/valid"
