@@ -3,6 +3,7 @@ output_channels: 1
 
 kind_loss: "binary_cross_entropy"
 kind_optimizer: "AdamW"
+train_transform_variant: "gaussian"
 
 num_epochs: 150
 path_checkpoint: 'weights/'
@@ -36,7 +37,6 @@ train_gt_data_path: "patches/train_gt"
 train_batch_size: 8
 train_patch_size: 256
 train_log_every: 100
-train_transform_variant: "gaussian"
 train_max_value: 500
 train_kwargs:
   shuffle: True

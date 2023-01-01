@@ -20,9 +20,7 @@ def get_transform(transform_variant: str, output_size: int):
     if transform_variant == 'gaussian':
         transform_list.append(CustomTransform.GaussianBlur(kernel_size=(3, 5), sigma=(0.3, 1.5)))
     elif transform_variant == 'equalize_contrast':
-        transform_list.append(CustomTransform.ColorJitter(brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5))
-    elif transform_variant == 'adjust_sharpness':
-        transform_list.append(CustomTransform.RandomAdjustSharpness(sharpness_factor=0))
+        transform_list.append(CustomTransform.RandomEqualize())
 
     transform_list.append(CustomTransform.ColorJitter(brightness=0.5, contrast=0.5, hue=0.5, saturation=0.5))
     transform_list.append(CustomTransform.RandomRotation((0, 360)))

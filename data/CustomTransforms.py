@@ -13,6 +13,22 @@ class ToTensor(transforms.ToTensor):
         return {'image': image, 'gt': gt}
 
 
+class ColorJitter(transforms.ColorJitter):
+
+    def __call__(self, sample):
+        image, gt = sample['image'], sample['gt']
+        image = super().__call__(image)
+        return {'image': image, 'gt': gt}
+
+
+class GaussianBlur(transforms.GaussianBlur):
+    def __call__(self, sample):
+        image, gt = sample['image'], sample['gt']
+        image = functional.gaussian_blur(img=image, kernel_size=self.kernel_size, sigma=self.sigma)
+        # gt = super().forward(gt)
+        return {'image': image, 'gt': gt}
+
+
 class RandomCrop(transforms.RandomCrop):
 
     def __init__(self, size):
@@ -47,14 +63,6 @@ class RandomVerticalFlip(transforms.RandomVerticalFlip):
         return {'image': image, 'gt': gt}
 
 
-class ColorJitter(transforms.ColorJitter):
-
-    def __call__(self, sample):
-        image, gt = sample['image'], sample['gt']
-        image = super().__call__(image)
-        return {'image': image, 'gt': gt}
-
-
 class RandomRotation(transforms.RandomRotation):
 
     def __call__(self, sample):
@@ -71,14 +79,6 @@ class RandomRotation(transforms.RandomRotation):
 
 class CenterCrop(transforms.CenterCrop):
 
-    def __call__(self, sample):
-        image, gt = sample['image'], sample['gt']
-        image = super().forward(image)
-        gt = super().forward(gt)
-        return {'image': image, 'gt': gt}
-
-
-class GaussianBlur(transforms.GaussianBlur):
     def __call__(self, sample):
         image, gt = sample['image'], sample['gt']
         image = super().forward(image)
