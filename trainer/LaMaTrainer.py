@@ -71,7 +71,6 @@ class LaMaTrainingModule:
 
         checkpoint = torch.load(checkpoints_path, map_location=None)
         self.model.load_state_dict(checkpoint['model'], strict=True)
-        self.optimizer.load_state_dict(checkpoint['optimizer'])
         self.epoch = checkpoint['epoch']
         self.best_psnr = checkpoint['best_psnr']
         self.learning_rate = checkpoint['learning_rate']
@@ -81,7 +80,6 @@ class LaMaTrainingModule:
         os.makedirs(root_folder, exist_ok=True)
         checkpoint = {
             'model': self.model.state_dict(),
-            'optimizer': self.optimizer.state_dict(),
             'epoch': self.epoch,
             'best_psnr': self.best_psnr,
             'learning_rate': self.learning_rate,

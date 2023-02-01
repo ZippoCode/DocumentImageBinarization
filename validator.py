@@ -4,6 +4,7 @@ import sys
 import torch.utils.data
 import yaml
 from torchvision.transforms import functional
+import matplotlib.pyplot as plt
 
 from data.utils import reconstruct_ground_truth
 from trainer.LaMaTrainer import LaMaTrainingModule, calculate_psnr
@@ -19,9 +20,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-s', '--save_images', metavar='True or False', type=bool,
-                        help=f"If TRUE will be saved the result images", default=True)
+                        help=f"If TRUE will be saved the result images", default=False)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use during running", default="evaluation_custom_mse")
+    parser.add_argument('-v', '--view_details', metavar='true or false', type=bool,
+                        help=f"If TRUE the run will show the errors of predictions", default=True)
 
     args = parser.parse_args()
 
@@ -73,6 +76,12 @@ if __name__ == '__main__':
                 names.append(image_name)
                 images.append(pred_img)
 
+                if args.view_details:
+                    diff = 1.0 - (pred - gt_valid)
+                    diff_img = functional.to_pil_image(diff.squeeze(0))
+                    plt.imshow(diff_img, cmap='gray')
+                    plt.show()
+
             avg_psnr = total_psnr / len(trainer.valid_data_loader)
             psnr, precision, recall = validator.get_metrics()
             logger.info(f"Average PSNR: {avg_psnr:.6f} - {psnr:.6f}")
@@ -81,6 +90,8 @@ if __name__ == '__main__':
             if args.save_images:
                 store_images(parent_directory='results/evaluation', directory=valid_config["filename_checkpoint"],
                              names=names, images=images)
+
+
 
     except KeyboardInterrupt:
         logger.warning("Validation interrupted by user")

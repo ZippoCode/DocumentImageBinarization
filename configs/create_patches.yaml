@@ -1,11 +1,5 @@
-paths:
-  train: "dataset/original/"
-  ground_truth: "dataset/ground_truth/"
-  destination: "patches/"
-
-validation_dataset: "2016"
-testing_dataset: "2018"
+source_original: "dataset/original/"
+source_ground_truth: "dataset/ground_truth/"
 patch_size: 384
-patch_size_valid: 256
 overlap_size: 192
 
