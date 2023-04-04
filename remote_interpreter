@@ -1,0 +1,9 @@
+#!/bin/bash
+python="/homes/sprochilo/.conda/envs/lama/bin/python3"
+n_gpu=${GPU:-1} # Use GPU environment variable if it exists, use 1 instead
+
+if [[ $@ != *"generator3.py"* ]]; then
+    /usr/bin/srun -Q --immediate=10 --partition=students-dev --gres=gpu:$n_gpu --mem=8G $python -u "$@"
+else
+    $python "$@"
+fi

@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import torch.utils.data
 from torchvision.transforms import functional
-from typing_extensions import TypedDict
 
 from data.dataloaders import make_train_dataloader, make_valid_dataloader
 from data.datasets import make_train_dataset, make_valid_dataset

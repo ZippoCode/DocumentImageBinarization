@@ -3,7 +3,7 @@ output_channels: 1
 
 kind_loss: "binary_cross_entropy"
 kind_optimizer: "Adam"
-train_transform_variant: "gaussian"
+train_transform_variant: "default"
 
 num_epochs: 150
 path_checkpoint: 'weights/'
@@ -32,8 +32,8 @@ resnet_conv_kwargs:
 
 
 # Train configuration
-train_data_path: "patches/2018/train"
-train_gt_data_path: "patches/2018/train_gt"
+train_data_path: "patches/2009/train"
+train_gt_data_path: "patches/2009/train_gt"
 train_batch_size: 8
 train_patch_size: 256
 train_log_every: 100
@@ -46,8 +46,8 @@ train_kwargs:
 
 
 # Valid configuration
-valid_data_path: "patches/2018/valid"
-valid_gt_data_path: "patches/2018/valid_gt"
+valid_data_path: "patches/2009/valid"
+valid_gt_data_path: "patches/2009/valid_gt"
 valid_batch_size: 1
 valid_patch_size: 256
 valid_stride: 256
