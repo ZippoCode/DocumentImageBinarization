@@ -1,0 +1,29 @@
+input_channels: 3
+output_channels: 1
+
+path_checkpoint: 'weights/'
+filename_checkpoint: "bce_adam_2018_best_psnr.pth"
+
+# LaMa Configuration
+init_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+down_sample_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+resnet_conv_kwargs:
+  ratio_gin: 0.75
+  ratio_gout: 0.75
+
+
+# Valid configuration
+valid_data_path: "patches/2018/valid"
+valid_gt_data_path: "patches/2018/valid_gt"
+valid_patch_size: 256
+valid_batch_size: 1
+valid_stride: 256
+valid_kwargs:
+  shuffle: False
+  pin_memory: True
+  batch_size: 1
+  num_workers: 2

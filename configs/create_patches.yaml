@@ -1,5 +1,7 @@
 source_original: "dataset/original/"
 source_ground_truth: "dataset/ground_truth/"
+train_folder: "/train/"
+train_gt_folder: "/train_gt/"
 patch_size: 384
 overlap_size: 192
 

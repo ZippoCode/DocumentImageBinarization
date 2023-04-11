@@ -1,7 +1,7 @@
 import os
 
-import cv2
 import numpy as np
+from PIL import Image
 from tqdm import tqdm
 
 from utils.htr_logging import get_logger
@@ -17,6 +17,20 @@ def check_or_create_folder(name: str):
     logger.info(f"Destination folder: \"{name}\"")
 
 
+def read_image(source_path: str, mode="RGB"):
+    with Image.open(source_path) as img:
+        image = img.convert(mode=mode)
+        image = np.asarray(image, dtype=np.uint8)
+    return image
+
+
+def save_image(image: np.ndarray, file_name: str, folder: str, img_format="PNG"):
+    fp = f"{folder}/{file_name}"
+    image = image.astype(dtype=np.uint8)
+    img = Image.fromarray(image, mode="RGB")
+    img.save(fp=fp, format=img_format)
+
+
 class PatchImage:
 
     def __init__(self, config_options: dict, destination_root: str, year_validation: str):
@@ -29,8 +43,7 @@ class PatchImage:
         self.patch_size = config_options['patch_size']
         self.overlap_size = config_options['overlap_size']
         self.validation_year = year_validation
-
-        self.number_image = 1
+        self.number_image = 0
 
         logger.info(f"Using Patch size: {self.patch_size} - Overlapping: {self.overlap_size}")
         logger.info(f"Validation Year: {year_validation}")
@@ -42,58 +55,49 @@ class PatchImage:
     def create_patches(self):
         logger.info("Start process ...")
         all_datasets = os.listdir(self.source_original)
+        all_datasets.sort()
         pbar = tqdm(all_datasets)
 
         try:
             for d_set in pbar:
                 for im in os.listdir(self.source_original + d_set):
                     pbar.set_description(f"Processing {im} of {d_set}")
-                    or_img = cv2.imread(self.source_original + d_set + '/' + im)
-                    gt_img = cv2.imread(self.source_ground_truth + d_set + '/' + im)
+                    or_img = read_image(self.source_original + d_set + '/' + im)
+                    gt_img = read_image(self.source_ground_truth + d_set + '/' + im)
+
                     if d_set not in [self.validation_year]:
                         self._split_train_images(or_img, gt_img)
                     else:
-                        print(im)
+                        pbar.set_description(f"Excluded {im} of {d_set}")
             logger.info(f"Stored {self.number_image} training patches")
         except KeyboardInterrupt:
             logger.error("Keyboard Interrupt: stop running!")
 
     def _split_train_images(self, or_img: np.ndarray, gt_img: np.ndarray):
-        for i in range(0, or_img.shape[0], self.overlap_size):
-            for j in range(0, or_img.shape[1], self.overlap_size):
+        height = or_img.shape[0]
+        width = or_img.shape[1]
+        for i in range(0, height, self.overlap_size):
+            for j in range(0, width, self.overlap_size):
+                dg = np.ones((self.patch_size, self.patch_size, 3)) * 255
+                gt = np.ones((self.patch_size, self.patch_size, 3)) * 255
 
-                if i + self.patch_size <= or_img.shape[0] and j + self.patch_size <= or_img.shape[1]:
-                    dg_patch = or_img[i:i + self.patch_size, j:j + self.patch_size, :]
-                    gt_patch = gt_img[i:i + self.patch_size, j:j + self.patch_size, :]
+                if i + self.patch_size <= height and j + self.patch_size <= width:
+                    dg = or_img[i:i + self.patch_size, j:j + self.patch_size, :]
+                    gt = gt_img[i:i + self.patch_size, j:j + self.patch_size, :]
 
-                elif i + self.patch_size > or_img.shape[0] and j + self.patch_size <= or_img.shape[1]:
-                    dg_patch = np.ones((self.patch_size, self.patch_size, 3)) * 255
-                    gt_patch = np.ones((self.patch_size, self.patch_size, 3)) * 255
+                elif i + self.patch_size > height and j + self.patch_size <= width:
+                    dg[0:height - i, :, :] = or_img[i:height, j:j + self.patch_size, :]
+                    gt[0:height - i, :, :] = gt_img[i:height, j:j + self.patch_size, :]
 
-                    dg_patch[0:or_img.shape[0] - i, :, :] = or_img[i:or_img.shape[0], j:j + self.patch_size, :]
-                    gt_patch[0:or_img.shape[0] - i, :, :] = gt_img[i:or_img.shape[0], j:j + self.patch_size, :]
-
-                elif i + self.patch_size <= or_img.shape[0] and j + self.patch_size > or_img.shape[1]:
-                    dg_patch = np.ones((self.patch_size, self.patch_size, 3)) * 255
-                    gt_patch = np.ones((self.patch_size, self.patch_size, 3)) * 255
-
-                    dg_patch[:, 0:or_img.shape[1] - j, :] = or_img[i:i + self.patch_size, j:or_img.shape[1], :]
-                    gt_patch[:, 0:or_img.shape[1] - j, :] = gt_img[i:i + self.patch_size, j:or_img.shape[1], :]
+                elif i + self.patch_size <= height and j + self.patch_size > width:
+                    dg[:, 0:width - j, :] = or_img[i:i + self.patch_size, j:width, :]
+                    gt[:, 0:width - j, :] = gt_img[i:i + self.patch_size, j:width, :]
 
                 else:
-                    dg_patch = np.ones((self.patch_size, self.patch_size, 3)) * 255
-                    gt_patch = np.ones((self.patch_size, self.patch_size, 3)) * 255
+                    dg[0:height - i, 0:width - j, :] = or_img[i:height, j:width, :]
+                    gt[0:height - i, 0:width - j, :] = gt_img[i:height, j:width, :]
 
-                    dg_patch[0:or_img.shape[0] - i, 0:or_img.shape[1] - j, :] = or_img[i:or_img.shape[0],
-                                                                                j:or_img.shape[1],
-                                                                                :]
-                    gt_patch[0:or_img.shape[0] - i, 0:or_img.shape[1] - j, :] = gt_img[i:or_img.shape[0],
-                                                                                j:or_img.shape[1],
-                                                                                :]
-                    gt_patch[0:or_img.shape[0] - i, 0:or_img.shape[1] - j, :] = gt_img[i:or_img.shape[0],
-                                                                                j:or_img.shape[1],
-                                                                                :]
+                save_image(dg, file_name=str(self.number_image), folder=self.train_folder)
+                save_image(gt, file_name=str(self.number_image), folder=self.train_gt_folder)
 
-                cv2.imwrite(self.train_folder + str(self.number_image) + '.png', dg_patch)
-                cv2.imwrite(self.train_gt_folder + str(self.number_image) + '.png', gt_patch)
                 self.number_image += 1
