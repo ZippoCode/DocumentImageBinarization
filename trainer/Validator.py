@@ -48,6 +48,7 @@ class Validator:
                           init_conv_kwargs=config['init_conv_kwargs'],
                           downsample_conv_kwargs=config['down_sample_conv_kwargs'],
                           resnet_conv_kwargs=config['resnet_conv_kwargs'])
+        self.model.to(device=device)
         self._load_checkpoints()
 
     def _load_checkpoints(self):

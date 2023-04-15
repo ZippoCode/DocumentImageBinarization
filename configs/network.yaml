@@ -1,0 +1,19 @@
+# LaMa Configuration
+input_channels: 3
+output_channels: 1
+
+init_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+down_sample_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+resnet_conv_kwargs:
+  ratio_gin: 0.75
+  ratio_gout: 0.75
+
+
+# TO DO DELETE
+valid_batch_size: 1
+valid_patch_size: 256
+valid_stride: 256

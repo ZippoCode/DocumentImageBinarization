@@ -1,34 +1,14 @@
+import argparse
 import os
 
 import numpy as np
-from PIL import Image
+import yaml
 from tqdm import tqdm
 
 from utils.htr_logging import get_logger
+from utils.ioutils import create_folder, read_image, save_image
 
 logger = get_logger('create_training_patches')
-
-
-def check_or_create_folder(name: str):
-    if not os.path.exists(name):
-        os.makedirs(name)
-    else:
-        os.system('rm -rf ' + name + '*')
-    logger.info(f"Destination folder: \"{name}\"")
-
-
-def read_image(source_path: str, mode="RGB"):
-    with Image.open(source_path) as img:
-        image = img.convert(mode=mode)
-        image = np.asarray(image, dtype=np.uint8)
-    return image
-
-
-def save_image(image: np.ndarray, file_name: str, folder: str, img_format="PNG"):
-    fp = f"{folder}/{file_name}"
-    image = image.astype(dtype=np.uint8)
-    img = Image.fromarray(image, mode="RGB")
-    img.save(fp=fp, format=img_format)
 
 
 class PatchImage:
@@ -49,8 +29,8 @@ class PatchImage:
         logger.info(f"Validation Year: {year_validation}")
 
     def _create_folders(self):
-        check_or_create_folder(self.train_folder)
-        check_or_create_folder(self.train_gt_folder)
+        create_folder(self.train_folder, clean=True)
+        create_folder(self.train_gt_folder, clean=True)
 
     def create_patches(self):
         logger.info("Start process ...")
@@ -97,7 +77,39 @@ class PatchImage:
                     dg[0:height - i, 0:width - j, :] = or_img[i:height, j:width, :]
                     gt[0:height - i, 0:width - j, :] = gt_img[i:height, j:width, :]
 
-                save_image(dg, file_name=str(self.number_image), folder=self.train_folder)
-                save_image(gt, file_name=str(self.number_image), folder=self.train_gt_folder)
+                save_image(dg, directory=self.train_folder, filename=str(self.number_image))
+                save_image(gt, directory=self.train_gt_folder, filename=str(self.number_image))
 
                 self.number_image += 1
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-year', '--validation_year',
+                        metavar='<path>',
+                        type=str,
+                        help=f"Year considered as testing dataset. Default: 2018",
+                        default="2018")
+    parser.add_argument('-dst', '--path_destination',
+                        metavar='<path>',
+                        type=str,
+                        help=f"Destination folder path with contains the patches. Default: \"patches\"",
+                        default="patches")
+    parser.add_argument('-cfg', '--configuration',
+                        metavar='<filename>',
+                        type=str,
+                        help=f"Configuration YAML file",
+                        default="configs/create_patches.yaml")
+    args = parser.parse_args()
+
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    path_configuration = os.path.join(root_dir, args.configuration)
+    destination_path = f"{args.path_destination}/{args.validation_year}"
+
+    with open(path_configuration) as file:
+        config_options = yaml.load(file, Loader=yaml.Loader)
+        file.close()
+
+    patcher = PatchImage(config_options=config_options, destination_root=destination_path,
+                         year_validation=args.validation_year)
+    patcher.create_patches()
