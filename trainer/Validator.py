@@ -1,6 +1,3 @@
-import os
-import errno
-
 import torch
 from ignite.engine import Engine
 from ignite.metrics import PSNR, Precision, Recall
@@ -8,6 +5,7 @@ from ignite.metrics import PSNR, Precision, Recall
 from data.dataloaders import make_valid_dataloader
 from data.datasets import make_valid_dataset
 from modules.FFC import LaMa
+from utils.checkpoints import load_checkpoints
 from utils.htr_logging import get_logger
 
 
@@ -49,16 +47,7 @@ class Validator:
                           downsample_conv_kwargs=config['down_sample_conv_kwargs'],
                           resnet_conv_kwargs=config['resnet_conv_kwargs'])
         self.model.to(device=device)
-        self._load_checkpoints()
-
-    def _load_checkpoints(self):
-        if not os.path.exists(path=self._checkpoints_path):
-            self._logger.warning(f"Checkpoints {self._checkpoints_path} not found.")
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self._checkpoints_path)
-
-        checkpoint = torch.load(self._checkpoints_path, map_location=self._device)
-        self.model.load_state_dict(checkpoint['model'], strict=True)
-        self._logger.info(f"Loaded pretrained checkpoint model from \"{self._checkpoints_path}\"")
+        load_checkpoints(model=self.model, device=self._device, checkpoints_path=self._checkpoints_path)
 
     def compute(self, predicts: torch.Tensor, targets: torch.Tensor):
         state = self._evaluator.run([[predicts, targets]])

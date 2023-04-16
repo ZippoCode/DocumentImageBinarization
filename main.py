@@ -9,6 +9,7 @@ from PIL import Image
 from torchvision.utils import make_grid
 
 from modules.FFC import LaMa
+from utils.checkpoints import load_checkpoints
 from utils.htr_logging import get_logger
 from utils.ioutils import save_image
 
@@ -47,9 +48,7 @@ if __name__ == '__main__':
                  downsample_conv_kwargs=network_config['down_sample_conv_kwargs'],
                  resnet_conv_kwargs=network_config['resnet_conv_kwargs'])
     model.to(device=device)
-
-    checkpoint = torch.load(args.path_checkpoints, map_location=device)
-    model.load_state_dict(checkpoint['model'], strict=True)
+    load_checkpoints(model=model, device=device, checkpoints_path=args.path_checkpoints)
 
     with torch.no_grad():
         sample = functional.to_tensor(sample).unsqueeze(0)
@@ -80,4 +79,5 @@ if __name__ == '__main__':
         filename = os.path.splitext(os.path.basename(args.image))[0]
         save_image(bin_image, directory=args.path_destination, filename=f"{filename}_bin.png")
         logger.info("End.")
+
         sys.exit()
