@@ -1,8 +1,6 @@
 import errno
-import math
 import os
 
-import numpy as np
 import torch
 import torch.utils.data
 from torchvision.transforms import functional
@@ -13,19 +11,8 @@ from data.utils import reconstruct_ground_truth
 from modules.FFC import LaMa
 from trainer.Losses import make_criterion
 from trainer.Optimizers import make_optimizer
-from trainer.Validator import Validator
 from utils.htr_logging import get_logger
-
-
-def calculate_psnr(predicted: torch.Tensor, ground_truth: torch.Tensor, threshold=0.5):
-    pred_img = predicted.detach().cpu().numpy()
-    gt_img = ground_truth.detach().cpu().numpy()
-
-    pred_img = (pred_img > threshold) * 1.0
-
-    mse = np.mean((pred_img - gt_img) ** 2)
-    psnr = 100 if mse == 0 else (20 * math.log10(1.0 / math.sqrt(mse)))
-    return psnr
+from utils.metrics import calculate_psnr
 
 
 class LaMaTrainingModule:
@@ -61,19 +48,22 @@ class LaMaTrainingModule:
         # Logging
         self.logger = get_logger(LaMaTrainingModule.__name__)
 
-    def load_checkpoints(self, folder: str, filename: str):
+    def resume_checkpoints(self, folder: str, filename: str):
         checkpoints_path = f"{folder}{filename}_best_psnr.pth"
 
         if not os.path.exists(path=checkpoints_path):
             self.logger.warning(f"Checkpoints {checkpoints_path} not found.")
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), checkpoints_path)
 
-        checkpoint = torch.load(checkpoints_path, map_location=None)
-        self.model.load_state_dict(checkpoint['model'], strict=True)
-        self.epoch = checkpoint['epoch']
-        self.best_psnr = checkpoint['best_psnr']
-        self.learning_rate = checkpoint['learning_rate']
-        self.logger.info(f"Loaded pretrained checkpoint model from \"{checkpoints_path}\"")
+        try:
+            checkpoint = torch.load(checkpoints_path, map_location=self.device)
+            self.model.load_state_dict(checkpoint['model'], strict=True)
+            self.epoch = checkpoint['epoch']
+            self.best_psnr = checkpoint['best_psnr']
+            self.learning_rate = checkpoint['learning_rate']
+            self.logger.info(f"Loaded pretrained checkpoint model from \"{checkpoints_path}\"")
+        except RuntimeError:
+            self.logger.error("Error resuming checkpoints!")
 
     def save_checkpoints(self, root_folder: str, filename: str):
         os.makedirs(root_folder, exist_ok=True)
@@ -90,9 +80,9 @@ class LaMaTrainingModule:
 
     def validation(self, threshold=0.5):
         valid_loss = 0.0
+        valid_psnr = 0.0
 
         images = {}
-        validator = Validator()
 
         for item in self.valid_data_loader:
             image_name = item['image_name'][0]
@@ -114,9 +104,9 @@ class LaMaTrainingModule:
             loss = self.criterion(pred, gt_valid)
             valid_loss += loss.item()
 
-            validator.compute(pred, gt_valid)
-
             pred = torch.where(pred > threshold, 1., 0.)
+            valid_psnr += calculate_psnr(pred, gt_valid)
+
             valid = sample.squeeze(0).detach()
             pred = pred.squeeze(0).detach()
             gt_valid = gt_valid.squeeze(0).detach()
@@ -126,6 +116,6 @@ class LaMaTrainingModule:
             images[image_name] = [valid_img, pred_img, gt_valid_img]
 
         avg_loss = valid_loss / len(self.valid_data_loader)
-        avg_psnr, avg_precision, avg_recall = validator.get_metrics()
+        avg_psnr = valid_psnr / len(self.valid_dataset)
 
-        return avg_psnr, avg_precision, avg_recall, avg_loss, images
+        return avg_psnr, avg_loss, images

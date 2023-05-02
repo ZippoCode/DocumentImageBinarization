@@ -13,15 +13,15 @@ logger = get_logger('create_training_patches')
 
 class PatchImage:
 
-    def __init__(self, config_options: dict, destination_root: str, year_validation: str):
+    def __init__(self, options: dict, destination_root: str, year_validation: str):
         self.train_folder = destination_root + "/train/"
         self.train_gt_folder = destination_root + "/train_gt/"
         self._create_folders()
 
-        self.source_original = config_options['source_original']
-        self.source_ground_truth = config_options['source_ground_truth']
-        self.patch_size = config_options['patch_size']
-        self.overlap_size = config_options['overlap_size']
+        self.source_original = options['source_original']
+        self.source_ground_truth = options['source_ground_truth']
+        self.patch_size = options['patch_size']
+        self.overlap_size = options['overlap_size']
         self.validation_year = year_validation
         self.number_image = 0
 
@@ -110,6 +110,6 @@ if __name__ == '__main__':
         config_options = yaml.load(file, Loader=yaml.Loader)
         file.close()
 
-    patcher = PatchImage(config_options=config_options, destination_root=destination_path,
+    patcher = PatchImage(options=config_options, destination_root=destination_path,
                          year_validation=args.validation_year)
     patcher.create_patches()

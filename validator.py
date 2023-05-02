@@ -22,7 +22,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--save_images', metavar='True or False', type=bool,
                         help=f"If TRUE will be saved the result images", default=False)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
-                        help=f"The configuration name will use during running", default="evaluation_2013")
+                        help=f"The configuration name will use during running", default="evaluation_2016")
     parser.add_argument('-v', '--view_details', metavar='true or false', type=bool,
                         help=f"If TRUE the run will show the errors of predictions", default=False)
 

@@ -24,14 +24,16 @@ def read_image(source_path: str, mode="RGB"):
     return image
 
 
-def save_image(image: Union[np.ndarray, Image.Image], directory: str, filename: str, img_format="PNG"):
+def save_image(image: Union[np.ndarray, Image.Image], directory: str, filename: str, img_format="PNG", log=False):
     create_folder(directory)
     filename_path = os.path.join(directory, filename)
     if type(image) == np.ndarray:
         image = image.astype(dtype=np.uint8)
         image = Image.fromarray(image, mode="RGB")
     image.save(fp=filename_path, format=img_format)
-    logger.info(f"Stored \"{filename}\" into: \"{directory}\"")
+
+    if log:
+        logger.info(f"Stored \"{filename}\" into: \"{directory}\"")
 
 
 def store_images(parent_directory: str, directory: str, names: list, images: list):

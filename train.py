@@ -11,10 +11,10 @@ import yaml
 from torchvision.transforms import functional
 
 from trainer.LaMaTrainer import LaMaTrainingModule
-from trainer.Validator import Validator
 from utils.WandbLog import WandbLog
 from utils.htr_logging import get_logger, DEBUG
 from utils.ioutils import store_images
+from utils.metrics import calculate_psnr
 
 logger = get_logger('main')
 
@@ -22,55 +22,65 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logger.info(f"Using {device} device")
 
 
-def train(config_args, config):
-    wandb_log = None
-    if config_args.use_wandb:  # Configure WandB
-        wandb_log = WandbLog(experiment_name=config_args.experiment_name)
-        params = {
-            "Architecture": "lama",
+def train(experiment_name: str, resume_training: bool, configuration: str, use_wandb: bool, train_network: bool):
+    logger.info("Start process ...")
 
-            "Learning Rate": config['learning_rate'],
-            "Epochs": config['num_epochs'],
+    configuration_path = f"configs/training/{configuration}.yaml"
+    logger.info(f"Selected \"{configuration_path}\" configuration file")
 
-            "Train Batch Size": config['train_batch_size'],
-            "Valid Batch Size": config['valid_batch_size'],
-            "Train Patch Size": config['train_patch_size'],
-            "Valid Patch Size": config['valid_patch_size'],
-            "Valid Stride": config['valid_stride'],
+    with open(configuration_path) as file:
+        train_config = yaml.load(file, Loader=yaml.Loader)
+        file.close()
 
-            "Loss": config['kind_loss'],
-            "Optimizer": config['kind_optimizer'],
-            "Transform Variant": config['train_transform_variant'],
-        }
-        wandb_log.setup(**params)
+    random_seed(train_config['seed'])
 
-    trainer = LaMaTrainingModule(config, device=device)
+    trainer = LaMaTrainingModule(train_config, device=device)
+    if resume_training:
+        trainer.resume_checkpoints(folder=train_config['path_checkpoint'], filename=experiment_name)
     if torch.cuda.is_available():
         trainer.model.cuda()
 
-    if wandb_log:
-        wandb_log.add_watch(trainer.model)
+    # Configure WandB
+    if use_wandb:
+        wandb_log = WandbLog(experiment_name=experiment_name)
+        params = {
+            "Architecture": "lama",
 
-    validator = Validator()
+            "Learning Rate": train_config['learning_rate'],
+            "Epochs": train_config['num_epochs'],
+
+            "Train Batch Size": train_config['train_batch_size'],
+            "Valid Batch Size": train_config['valid_batch_size'],
+            "Train Patch Size": train_config['train_patch_size'],
+            "Valid Patch Size": train_config['valid_patch_size'],
+            "Valid Stride": train_config['valid_stride'],
+
+            "Loss": train_config['kind_loss'],
+            "Optimizer": train_config['kind_optimizer'],
+            "Transform Variant": train_config['train_transform_variant'],
+        }
+        wandb_log.setup(**params)
+        wandb_log.add_watch(trainer.model)
 
     try:
         start_time = time.time()
-        threshold = config['threshold'] if config['threshold'] else 0.5
+        threshold = train_config['threshold'] if train_config['threshold'] else 0.5
         patience = 30
 
-        for epoch in range(1, config['num_epochs']):
+        for epoch in range(1, train_config['num_epochs']):
             wandb_logs = dict()
 
-            if config_args.train:
+            if train_network:
                 logger.info("Training has been started") if epoch == 1 else None
                 logger.info(f"Epoch {trainer.epoch} of {trainer.num_epochs}")
 
-                train_loss = 0.0
-                visualization = torch.zeros((1, config['train_patch_size'], config['train_patch_size']), device=device)
+                train_loss = 0.
+                train_psnr = 0.
+                visualization = torch.zeros((1, train_config['train_patch_size'], train_config['train_patch_size']),
+                                            device=device)
                 training_images = []
 
                 trainer.model.train()
-                validator.reset()
 
                 for batch_idx, (train_in, train_out) in enumerate(trainer.train_data_loader):
                     inputs, outputs = train_in.to(device), train_out.to(device)
@@ -88,9 +98,10 @@ def train(config_args, config):
                     visualization += torch.sum(tensor_diff, dim=0)
 
                     with torch.no_grad():
-                        psnr, precision, recall = validator.compute(predictions, outputs)
+                        psnr = calculate_psnr(predictions, outputs)
+                        train_psnr += psnr
 
-                        if batch_idx % config['train_log_every'] == 0:
+                        if batch_idx % train_config['train_log_every'] == 0:
                             size = batch_idx * len(inputs)
                             percentage = 100. * size / len(trainer.train_dataset)
 
@@ -100,7 +111,6 @@ def train(config_args, config):
                             eta = str(timedelta(seconds=remaining_time))
 
                             stdout = f"Train Loss: {loss.item():.6f} - PSNR: {psnr:0.4f} -"
-                            stdout += f" Precision: {precision:0.4f}% - Recall: {recall:0.4f}%"
                             stdout += f" \t[{size} / {len(trainer.train_dataset)}]"
                             stdout += f" ({percentage:.2f}%)  Epoch eta: {eta}"
                             logger.info(stdout)
@@ -113,35 +123,28 @@ def train(config_args, config):
                                 training_images.append(wandb.Image(functional.to_pil_image(union), caption=f"Example"))
 
                 avg_train_loss = train_loss / len(trainer.train_dataset)
-                avg_train_psnr, avg_train_precision, avg_train_recall = validator.get_metrics()
+                avg_train_psnr = train_psnr / len(trainer.train_dataset)
 
                 stdout = f"AVG training loss: {avg_train_loss:0.4f} - AVG training PSNR: {avg_train_psnr:0.4f}"
-                stdout += f" AVG training precision: {avg_train_precision:0.4f}%"
-                stdout += f" AVG training recall: {avg_train_recall:0.4f}%"
                 logger.info(stdout)
 
                 wandb_logs['train_avg_loss'] = avg_train_loss
                 wandb_logs['train_avg_psnr'] = avg_train_psnr
-                wandb_logs['train_avg_precision'] = avg_train_precision
-                wandb_logs['train_avg_recall'] = avg_train_recall
                 wandb_logs['Random Sample'] = random.choices(training_images, k=5)
 
                 # Make error images
-                rescaled = torch.div(visualization, config['train_max_value'])
+                rescaled = torch.div(visualization, train_config['train_max_value'])
                 rescaled = torch.clamp(rescaled, min=0., max=1.)
                 wandb_logs['Errors'] = wandb.Image(functional.to_pil_image(rescaled))
 
                 # Validation
                 trainer.model.eval()
-                validator.reset()
 
                 with torch.no_grad():
-                    valid_psnr, valid_precision, valid_recall, valid_loss, images = trainer.validation()
+                    valid_psnr, valid_loss, images = trainer.validation()
 
                     wandb_logs['valid_avg_loss'] = valid_loss
                     wandb_logs['valid_avg_psnr'] = valid_psnr
-                    wandb_logs['valid_avg_precision'] = valid_precision
-                    wandb_logs['valid_avg_recall'] = valid_recall
 
                     name_image, (valid_img, pred_img, gt_valid_img) = list(images.items())[0]
                     wandb_logs['Results'] = [wandb.Image(valid_img, caption=f"Sample: {name_image}"),
@@ -151,16 +154,14 @@ def train(config_args, config):
                     if valid_psnr > trainer.best_psnr:
                         patience = 30
                         trainer.best_psnr = valid_psnr
-                        trainer.best_precision = valid_precision
-                        trainer.best_recall = valid_recall
 
-                        trainer.save_checkpoints(root_folder=config['path_checkpoint'],
-                                                 filename=config_args.experiment_name)
+                        trainer.save_checkpoints(root_folder=train_config['path_checkpoint'],
+                                                 filename=experiment_name)
 
                         # Save images
                         names = images.keys()
                         predicted_images = [item[1] for item in list(images.values())]
-                        store_images(parent_directory='results/training', directory=config_args.experiment_name,
+                        store_images(parent_directory='results/training', directory=experiment_name,
                                      names=names, images=predicted_images)
                     else:
                         patience -= 1
@@ -171,7 +172,6 @@ def train(config_args, config):
                 wandb_logs['Best Recall'] = trainer.best_recall
 
                 stdout = f"Validation Loss: {valid_loss:.4f} - PSNR: {valid_psnr:.4f}"
-                stdout += f" Precision: {valid_precision:.4f}% - Recall: {valid_recall:.4f}%"
                 stdout += f" Best Loss: {trainer.best_psnr:.3f}"
                 logger.info(stdout)
 
@@ -206,23 +206,19 @@ if __name__ == '__main__':
 
     parser.add_argument('-en', '--experiment_name', metavar='<name>', type=str,
                         help=f"The experiment name which will use on WandB", default="debug")
+    parser.add_argument('-rt', '--resume_training', metavar='<bool>', type=bool,
+                        help=f"Set if you want resume the checkpoint", default=True)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use on WandB", default="debug")
     parser.add_argument('-wdb', '--use_wandb', type=bool, default=not DEBUG)
-    parser.add_argument('-t', '--train', type=bool, default=True)
+    parser.add_argument('-tn', '--train_network', type=bool, default=True)
 
     args = parser.parse_args()
-    config_filename = args.configuration
+    experiment_name = args.experiment_name
+    resume_training = args.resume_training
+    configuration = args.configuration
+    use_wandb = args.use_wandb
+    train_network = args.train_network
 
-    logger.info("Start process ...")
-    configuration_path = f"configs/training/{config_filename}.yaml"
-    logger.info(f"Selected \"{configuration_path}\" configuration file")
-
-    with open(configuration_path) as file:
-        train_config = yaml.load(file, Loader=yaml.Loader)
-        file.close()
-
-    random_seed(train_config['seed'])
-
-    train(args, train_config)
+    train(experiment_name, resume_training, configuration, use_wandb, train_network)
     sys.exit()
