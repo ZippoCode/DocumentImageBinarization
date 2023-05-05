@@ -17,7 +17,7 @@ from utils.metrics import calculate_psnr
 
 class LaMaTrainingModule:
 
-    def __init__(self, config, device=None):
+    def __init__(self, config: dict, network_cfg: dict, device=None):
 
         self.config = config
         self.device = device
@@ -27,16 +27,26 @@ class LaMaTrainingModule:
         self.train_data_loader = make_train_dataloader(self.train_dataset, config)
         self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
 
-        self.model = LaMa(input_nc=config['input_channels'], output_nc=config['output_channels'],
-                          init_conv_kwargs=config['init_conv_kwargs'],
-                          downsample_conv_kwargs=config['down_sample_conv_kwargs'],
-                          resnet_conv_kwargs=config['resnet_conv_kwargs'])
+        self._input_channels = network_cfg['input_channels']
+        self._output_channels = network_cfg['output_channels']
+
+        self._batch = config['valid_batch_size']
+        self._patch_size = config['valid_patch_size']
+        self._stride = config['valid_stride']
+
+        self.model = LaMa(input_nc=self._input_channels,
+                          output_nc=self._output_channels,
+                          init_conv_kwargs=network_cfg['init_conv_kwargs'],
+                          downsample_conv_kwargs=network_cfg['down_sample_conv_kwargs'],
+                          resnet_conv_kwargs=network_cfg['resnet_conv_kwargs'])
 
         # Training
         self.epoch = 0
         self.num_epochs = config['num_epochs']
         self.learning_rate = config['learning_rate']
-        self.optimizer = make_optimizer(self.model, self.learning_rate, config['kind_optimizer'], config['optimizer'])
+
+        self.optimizer = make_optimizer(self.model, self.learning_rate, config['kind_optimizer'],
+                                        network_cfg['optimizer'])
         self.criterion = make_criterion(kind=config['kind_loss']).to(device=device)
 
         # Validation
@@ -99,7 +109,8 @@ class LaMaTrainingModule:
             valid = valid.permute(1, 0, 2, 3)
             pred = self.model(valid)
 
-            pred = reconstruct_ground_truth(pred, gt_valid, num_rows=num_rows, config=self.config)
+            pred = reconstruct_ground_truth(pred, gt_valid, num_rows=num_rows, channels=self._output_channels,
+                                            batch=self._batch, patch_size=self._patch_size, stride=self._stride)
 
             loss = self.criterion(pred, gt_valid)
             valid_loss += loss.item()

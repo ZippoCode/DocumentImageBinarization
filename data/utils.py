@@ -54,12 +54,8 @@ def get_patches(image_source: Image, patch_size: int, stride: int):
     return np.array(image_patches), num_rows, num_cols
 
 
-def reconstruct_ground_truth(patches: torch.Tensor, original: torch.Tensor, num_rows: int, config: dict):
-    channels = config['output_channels']
-    batch = config['valid_batch_size']
-    patch_size = config['valid_patch_size']
-    stride = config['valid_stride']
-
+def reconstruct_ground_truth(patches: torch.Tensor, original: torch.Tensor, num_rows: int, channels: int, batch: int,
+                             patch_size: int, stride: int):
     if stride == 128:
         _, _, width, height = original.shape
 

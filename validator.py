@@ -1,18 +1,18 @@
 import argparse
+import os
 import sys
 
 import matplotlib.pyplot as plt
 import torch.utils.data
-import yaml
 from torchvision.transforms import functional
 
 from data.utils import reconstruct_ground_truth
-from trainer.LaMaTrainer import calculate_psnr
 from trainer.Validator import Validator
 from utils.htr_logging import get_logger
-from utils.ioutils import store_images
+from utils.ioutils import store_images, read_yaml
+from utils.metrics import calculate_psnr
 
-logger = get_logger('main')
+logger = get_logger(os.path.basename(__file__))
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logger.info(f"Using {device} device")
 
@@ -22,22 +22,27 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--save_images', metavar='True or False', type=bool,
                         help=f"If TRUE will be saved the result images", default=False)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
-                        help=f"The configuration name will use during running", default="evaluation_2016")
+                        help=f"The configuration name will use during running",
+                        default="configs/evaluation/evaluation_2018.yaml")
+    parser.add_argument('-net_cfg', '--network_configuration', metavar='<name>', type=str,
+                        help=f"The filename will be used to configure the network", default="configs/network.yaml")
     parser.add_argument('-v', '--view_details', metavar='true or false', type=bool,
                         help=f"If TRUE the run will show the errors of predictions", default=False)
 
     args = parser.parse_args()
 
     logger.info("Start process ...")
-    configuration_path = f"configs/evaluation/{args.configuration}.yaml"
 
     try:
-        with open(configuration_path) as file:
-            valid_config = yaml.load(file, Loader=yaml.Loader)
-            file.close()
-            logger.info(f"Loaded \"{configuration_path}\" configuration file")
+        valid_config = read_yaml(args.configuration)
+        network_cfg = read_yaml(args.network_configuration)
 
-        validator = Validator(config=valid_config, device=device)
+        output_channels = network_cfg['output_channels']
+        batch = valid_config['valid_batch_size']
+        patch_size = valid_config['valid_patch_size']
+        stride = valid_config['valid_stride']
+
+        validator = Validator(config=valid_config, network_cfg=network_cfg, device=device)
         logger.info("Start validation ...")
 
         with torch.no_grad():
@@ -58,7 +63,8 @@ if __name__ == '__main__':
 
                 valid = valid.squeeze(0).permute(1, 0, 2, 3)
                 pred = validator.model(valid)
-                pred = reconstruct_ground_truth(pred, gt_valid, num_rows=num_rows, config=valid_config)
+                pred = reconstruct_ground_truth(pred, gt_valid, num_rows=num_rows, channels=output_channels,
+                                                batch=batch, patch_size=patch_size, stride=stride)
                 total_psnr += calculate_psnr(pred, gt_valid)
 
                 validator.compute(pred, gt_valid)

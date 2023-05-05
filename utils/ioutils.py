@@ -2,6 +2,7 @@ import os
 from typing import Union
 
 import numpy as np
+import yaml
 from PIL import Image
 
 from utils.htr_logging import get_logger
@@ -15,6 +16,18 @@ def create_folder(folder_name: str, clean=False):
         logger.info(f"The folder \"{folder_name}\" has been created.")
     elif clean:
         os.system('rm -rf ' + folder_name + '*')
+
+
+def read_yaml(yaml_filename: str):
+    try:
+        with open(yaml_filename, 'r') as file:
+            yaml_file = yaml.load(file, Loader=yaml.Loader)
+            file.close()
+            logger.info(f"Read \"{yaml_filename}\" configuration file")
+    except FileNotFoundError:
+        logger.warning(f"File \"{yaml_filename}\" not found")
+        yaml_file = dict()
+    return yaml_file
 
 
 def read_image(source_path: str, mode="RGB"):

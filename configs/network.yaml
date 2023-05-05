@@ -12,8 +12,9 @@ resnet_conv_kwargs:
   ratio_gin: 0.75
   ratio_gout: 0.75
 
-
-# TO DO DELETE
-valid_batch_size: 1
-valid_patch_size: 256
-valid_stride: 256
+# Optimizer
+optimizer:
+  betas: [ 0.9, 0.95 ]
+  eps: 1.0e-08
+  weight_decay: 0.05
+  amsgrad: False

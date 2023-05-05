@@ -18,7 +18,7 @@ def eval_step(engine, batch, threshold=0.5):
 
 
 class Validator:
-    def __init__(self, config, device):
+    def __init__(self, config, network_cfg: dict, device=None):
         self._logger = get_logger(Validator.__name__)
 
         self._count = 0
@@ -42,10 +42,12 @@ class Validator:
         self.valid_dataset = make_valid_dataset(config)
         self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
 
-        self.model = LaMa(input_nc=config['input_channels'], output_nc=config['output_channels'],
-                          init_conv_kwargs=config['init_conv_kwargs'],
-                          downsample_conv_kwargs=config['down_sample_conv_kwargs'],
-                          resnet_conv_kwargs=config['resnet_conv_kwargs'])
+        self.model = LaMa(input_nc=network_cfg['input_channels'],
+                          output_nc=network_cfg['output_channels'],
+                          init_conv_kwargs=network_cfg['init_conv_kwargs'],
+                          downsample_conv_kwargs=network_cfg['down_sample_conv_kwargs'],
+                          resnet_conv_kwargs=network_cfg['resnet_conv_kwargs'])
+
         self.model.to(device=device)
         load_checkpoints(model=self.model, device=self._device, checkpoints_path=self._checkpoints_path)
 
