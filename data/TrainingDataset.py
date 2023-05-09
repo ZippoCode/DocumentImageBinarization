@@ -10,13 +10,15 @@ from data.utils import get_path
 
 class TrainingDataset(Dataset):
 
-    def __init__(self, root_dg_dir: str, root_gt_dir: str, split_size=256, transform=None):
-        assert len(os.listdir(root_dg_dir)) == len(os.listdir(root_gt_dir))
+    def __init__(self, root_dg_dir: str, root_gt_dir: str, transform=None):
+        assert os.path.isdir(root_dg_dir), f"Folder \"{root_dg_dir}\" not found"
+        assert os.path.isdir(root_gt_dir), f"Folder \"{root_gt_dir}\" not found"
+        assert len(os.listdir(root_dg_dir)) == len(os.listdir(root_gt_dir)), \
+            f"Folders \"{root_dg_dir}\" and \"{root_gt_dir}\" not have the same numbers of elements"
 
         super(TrainingDataset, self).__init__()
         self.root_dg_dir = root_dg_dir
         self.root_gt_dir = root_gt_dir
-        self.split_size = split_size
         self.transform = transform
 
         self.path_images = os.listdir(self.root_dg_dir)

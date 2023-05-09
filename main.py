@@ -28,7 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('-cn', '--configuration_network', metavar='<name>', type=str,
                         help=f"The configuration of the network", default="configs/network.yaml")
     parser.add_argument('-pc', '--path_checkpoints', metavar='<name>', type=str,
-                        help=f"The path of the checkpoints file", default="weights/lama_checkpoints.pth")
+                        help=f"The path of the checkpoints file", default="weights/bce_adam_2018_best_psnr.pth")
     parser.add_argument('-dst', '--path_destination', metavar='<path>', type=str,
                         help=f"Destination folder path with contains the result. Default: \"results\"",
                         default="results/testing")

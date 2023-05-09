@@ -9,7 +9,7 @@ from utils.ioutils import create_folder
 logger = get_logger(os.path.basename(__file__))
 
 
-def load_checkpoints(model: torch.nn.Module, device: torch.device, checkpoints_path: str):
+def load_checkpoints(model: torch.nn.Module, checkpoints_path: str, device=torch.device('cpu')):
     if not os.path.exists(path=checkpoints_path):
         logger.warning(f"Checkpoints {checkpoints_path} not found.")
         raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), checkpoints_path)

@@ -1,5 +1,5 @@
-source_original: "dataset/original/"
-source_ground_truth: "dataset/ground_truth/"
+source_original: "dataset/training/original/"
+source_ground_truth: "dataset/training/ground_truth/"
 train_folder: "/train/"
 train_gt_folder: "/train_gt/"
 patch_size: 384

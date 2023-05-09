@@ -39,10 +39,20 @@ def read_image(source_path: str, mode="RGB"):
 
 def save_image(image: Union[np.ndarray, Image.Image], directory: str, filename: str, img_format="PNG", log=False):
     create_folder(directory)
+
+    if filename[-4:].lower() != img_format.lower():
+        filename += f".{img_format.lower()}"
     filename_path = os.path.join(directory, filename)
     if type(image) == np.ndarray:
         image = image.astype(dtype=np.uint8)
-        image = Image.fromarray(image, mode="RGB")
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            image = Image.fromarray(image, mode="RGB")
+        elif len(image.shape) == 3 and image.shape[2] == 1:
+            image = np.squeeze(image, axis=2)
+            image = Image.fromarray(image, mode="L")
+        else:
+            image = Image.fromarray(image, mode="L")
+
     image.save(fp=filename_path, format=img_format)
 
     if log:

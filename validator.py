@@ -16,11 +16,12 @@ logger = get_logger(os.path.basename(__file__))
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logger.info(f"Using {device} device")
 
-if __name__ == '__main__':
+
+def parser_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-s', '--save_images', metavar='True or False', type=bool,
-                        help=f"If TRUE will be saved the result images", default=False)
+                        help=f"If TRUE will be saved the result images", default=True)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use during running",
                         default="configs/evaluation/evaluation_2018.yaml")
@@ -29,9 +30,13 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--view_details', metavar='true or false', type=bool,
                         help=f"If TRUE the run will show the errors of predictions", default=False)
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
 
     logger.info("Start process ...")
+    args = parser_arguments()
 
     try:
         valid_config = read_yaml(args.configuration)
@@ -86,7 +91,7 @@ if __name__ == '__main__':
             logger.info(f"Precision {precision:.4f} - Recall {recall:.4f}")
 
             if args.save_images:
-                store_images(parent_directory='results/evaluation', directory=valid_config["filename_checkpoint"],
+                store_images(parent_directory='results/evaluation', directory=valid_config["folder_destination"],
                              names=names, images=images)
 
     except KeyboardInterrupt:

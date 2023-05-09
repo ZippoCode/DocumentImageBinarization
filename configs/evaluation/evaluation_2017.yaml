@@ -1,9 +1,13 @@
+# Folder configuration
 path_checkpoint: 'weights/'
 filename_checkpoint: "bce_adam_2017_best_psnr.pth"
+folder_destination: "bce_adam_2017"
+
+# Dataset configuration
+valid_data_path: "dataset/training/original/2017"
+valid_gt_data_path: "dataset/training/ground_truth/2017"
 
 # Valid configuration
-valid_data_path: "dataset/original/2017"
-valid_gt_data_path: "dataset/ground_truth/2017"
 valid_patch_size: 256
 valid_batch_size: 1
 valid_stride: 256

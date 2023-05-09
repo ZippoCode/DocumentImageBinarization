@@ -1,7 +1,6 @@
 import argparse
-import os
-
 import numpy as np
+import os
 import yaml
 from tqdm import tqdm
 
@@ -93,8 +92,8 @@ if __name__ == '__main__':
     parser.add_argument('-dst', '--path_destination',
                         metavar='<path>',
                         type=str,
-                        help=f"Destination folder path with contains the patches. Default: \"patches\"",
-                        default="patches")
+                        help=f"Destination folder path with contains the patches. Default: \"dataset/patches\"",
+                        default="dataset/patches")
     parser.add_argument('-cfg', '--configuration',
                         metavar='<filename>',
                         type=str,
@@ -104,12 +103,13 @@ if __name__ == '__main__':
 
     root_dir = os.path.dirname(os.path.abspath(__file__))
     path_configuration = os.path.join(root_dir, args.configuration)
-    destination_path = f"{args.path_destination}/{args.validation_year}"
 
     with open(path_configuration) as file:
         config_options = yaml.load(file, Loader=yaml.Loader)
         file.close()
 
+    destination_patch_size = config_options['patch_size'] - 128
+    destination_path = f"{args.path_destination}/{destination_patch_size}/{args.validation_year}"
     patcher = PatchImage(options=config_options, destination_root=destination_path,
                          year_validation=args.validation_year)
     patcher.create_patches()
