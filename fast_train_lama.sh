@@ -14,5 +14,4 @@ srun /homes/sprochilo/.conda/envs/lama/bin/python3  -u /homes/sprochilo/binariza
                                                     -en="bce_adam_2018_256" \
                                                     -cfg="configs/training/binary_cross_entropy_adam_2018_256.yaml" \
                                                     --use_wandb=True \
-                                                    --train_network=True \
-                                                    --resume_training=False
+                                                    --train_network=True

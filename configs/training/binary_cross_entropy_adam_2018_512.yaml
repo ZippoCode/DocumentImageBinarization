@@ -29,8 +29,8 @@ train_kwargs:
 
 # Valid configuration
 valid_batch_size: 1
-valid_patch_size: 256
-valid_stride: 256
+valid_patch_size: 512
+valid_stride: 512
 valid_kwargs:
   shuffle: False
   pin_memory: True

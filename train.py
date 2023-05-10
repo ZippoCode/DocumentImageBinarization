@@ -29,7 +29,7 @@ def random_seed(config: dict):
         np.random.seed(seed)
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
-        logger.info(f"Configurated random seed with value: {seed}")
+        logger.info(f"Configured random seed with value: {seed}")
 
 
 def parser_arguments():
@@ -38,7 +38,7 @@ def parser_arguments():
     parser.add_argument('-en', '--experiment_name', metavar='<name>', type=str,
                         help=f"The experiment name which will use on WandB", default="debug")
     parser.add_argument('-rt', '--resume_training', metavar='<bool>', type=bool,
-                        help=f"Set if you want resume the checkpoint", default=True)
+                        help=f"Set if you want resume the checkpoint", default=False)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use on WandB", default="configs/training/debug.yaml")
     parser.add_argument('-net_cfg', '--network_configuration', metavar='<name>', type=str,
@@ -69,10 +69,11 @@ if __name__ == '__main__':
         random_seed(train_config)
 
         trainer = LaMaTrainingModule(train_config, network_config, device=device)
-        if resume_training:
-            trainer.resume_checkpoints(folder=train_config['path_checkpoint'], filename=experiment_name)
         if torch.cuda.is_available():
             trainer.model.cuda()
+
+        if resume_training:
+            trainer.resume_checkpoints(folder=train_config['path_checkpoint'], filename=experiment_name)
 
         # Configure WandB
         if use_wandb and train_network:

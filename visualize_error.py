@@ -23,11 +23,11 @@ def parser_arguments():
 
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use during running",
-                        default="configs/training/binary_cross_entropy_adam_2018_512.yaml")
+                        default="configs/training/binary_cross_entropy_adam_2018_256.yaml")
     parser.add_argument('-ncfg', '--network_configuration', metavar='<name>', type=str,
                         help=f"The filename will be used to configure the network", default="configs/network.yaml")
     parser.add_argument('-cp', '--checkpoints_path', metavar='<path>', type=str,
-                        help=f"The path of the checkpoints file", default="weights/bce_adam_2017_best_psnr.pth")
+                        help=f"The path of the checkpoints file", default="weights/bce_adam_2018_256_best_psnr.pth")
     parser.add_argument('-fn', '--filename', metavar='<string>', type=str,
                         help=f"Filename will be used to store the image result", default='patch_512')
     parser.add_argument('-fr', '--folder_result', metavar='<string>', type=str,

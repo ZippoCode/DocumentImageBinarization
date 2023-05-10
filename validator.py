@@ -15,6 +15,7 @@ from utils.metrics import calculate_psnr
 logger = get_logger(os.path.basename(__file__))
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logger.info(f"Using {device} device")
+threshold = 0.5
 
 
 def parser_arguments():
@@ -24,7 +25,7 @@ def parser_arguments():
                         help=f"If TRUE will be saved the result images", default=True)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use during running",
-                        default="configs/evaluation/evaluation_2018.yaml")
+                        default="configs/evaluation/evaluation_2018_512.yaml")
     parser.add_argument('-net_cfg', '--network_configuration', metavar='<name>', type=str,
                         help=f"The filename will be used to configure the network", default="configs/network.yaml")
     parser.add_argument('-v', '--view_details', metavar='true or false', type=bool,
@@ -52,12 +53,11 @@ if __name__ == '__main__':
 
         with torch.no_grad():
 
-            total_psnr = 0.0
+            total_psnr = .0
             names, images = [], []
 
             for item in validator.valid_data_loader:
                 image_name = item['image_name'][0]
-                sample = item['sample']
                 num_rows = item['num_rows'].item()
                 samples_patches = item['samples_patches']
                 gt_sample = item['gt_sample']
@@ -70,6 +70,7 @@ if __name__ == '__main__':
                 pred = validator.model(valid)
                 pred = reconstruct_ground_truth(pred, gt_valid, num_rows=num_rows, channels=output_channels,
                                                 batch=batch, patch_size=patch_size, stride=stride)
+                pred = torch.where(pred > threshold, 1., 0.)
                 total_psnr += calculate_psnr(pred, gt_valid)
 
                 validator.compute(pred, gt_valid)

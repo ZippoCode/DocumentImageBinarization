@@ -1,6 +1,6 @@
 # Folder configuration
 path_checkpoint: 'weights/'
-filename_checkpoint: "bce_adam_2018_best_psnr.pth"
+filename_checkpoint: "bce_adam_2018_512_best_psnr.pth"
 folder_destination: "bce_adam_2018"
 
 # Dataset configuration
@@ -8,9 +8,9 @@ valid_data_path: "dataset/training/original/2018"
 valid_gt_data_path: "dataset/training/ground_truth/2018"
 
 # Valid configuration
-valid_patch_size: 256
+valid_patch_size: 512
 valid_batch_size: 1
-valid_stride: 256
+valid_stride: 512
 valid_kwargs:
   shuffle: False
   pin_memory: True
