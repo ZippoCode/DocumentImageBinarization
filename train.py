@@ -32,46 +32,73 @@ def random_seed(config: dict):
         logger.info(f"Configurated random seed with value: {seed}")
 
 
-def train(experiment_name: str, resume_training: bool, configuration_path: str, network_configuration_path: str,
-          use_wandb: bool, train_network: bool):
-    logger.info("Start process ...")
+def parser_arguments():
+    parser = argparse.ArgumentParser()
 
-    train_config = read_yaml(configuration_path)
-    network_config = read_yaml(network_configuration_path)
+    parser.add_argument('-en', '--experiment_name', metavar='<name>', type=str,
+                        help=f"The experiment name which will use on WandB", default="debug")
+    parser.add_argument('-rt', '--resume_training', metavar='<bool>', type=bool,
+                        help=f"Set if you want resume the checkpoint", default=True)
+    parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
+                        help=f"The configuration name will use on WandB", default="configs/training/debug.yaml")
+    parser.add_argument('-net_cfg', '--network_configuration', metavar='<name>', type=str,
+                        help=f"The filename will be used to configure the network", default="configs/network.yaml")
+    parser.add_argument('-wdb', '--use_wandb', metavar='<value>', type=bool,
+                        help=f"If TRUE the training will use WandDB to show logs.", default=not DEBUG)
+    parser.add_argument('-tn', '--train_network', metavar='<value>', type=bool,
+                        help=f"If TRUE the network will be trained also only validate.", default=True)
 
-    random_seed(train_config)
+    return parser.parse_args()
 
-    trainer = LaMaTrainingModule(train_config, network_config, device=device)
-    if resume_training:
-        trainer.resume_checkpoints(folder=train_config['path_checkpoint'], filename=experiment_name)
-    if torch.cuda.is_available():
-        trainer.model.cuda()
 
-    # Configure WandB
-    if use_wandb and trainer:
-        wandb_log = WandbLog(experiment_name=experiment_name)
-        params = {
-            "Architecture": "lama",
-
-            "Learning Rate": train_config['learning_rate'],
-            "Epochs": train_config['num_epochs'],
-
-            "Train Batch Size": train_config['train_batch_size'],
-            "Valid Batch Size": train_config['valid_batch_size'],
-            "Train Patch Size": train_config['train_patch_size'],
-            "Valid Patch Size": train_config['valid_patch_size'],
-            "Valid Stride": train_config['valid_stride'],
-
-            "Loss": train_config['kind_loss'],
-            "Optimizer": train_config['kind_optimizer'],
-            "Transform Variant": train_config['train_transform_variant'],
-        }
-        wandb_log.setup(**params)
-        wandb_log.add_watch(trainer.model)
-
+if __name__ == '__main__':
     try:
+        args = parser_arguments()
+        experiment_name = args.experiment_name
+        resume_training = args.resume_training
+        configuration_path = args.configuration
+        network_configuration_path = args.network_configuration
+        use_wandb = args.use_wandb
+        train_network = args.train_network
+
+        logger.info("Start process ...")
+
+        train_config = read_yaml(configuration_path)
+        network_config = read_yaml(network_configuration_path)
+
+        random_seed(train_config)
+
+        trainer = LaMaTrainingModule(train_config, network_config, device=device)
+        if resume_training:
+            trainer.resume_checkpoints(folder=train_config['path_checkpoint'], filename=experiment_name)
+        if torch.cuda.is_available():
+            trainer.model.cuda()
+
+        # Configure WandB
+        if use_wandb and train_network:
+            wandb_log = WandbLog(experiment_name=experiment_name)
+            params = {
+                "Architecture": "lama",
+
+                "Learning Rate": train_config['learning_rate'],
+                "Epochs": train_config['num_epochs'],
+
+                "Train Batch Size": train_config['train_batch_size'],
+                "Valid Batch Size": train_config['valid_batch_size'],
+                "Train Patch Size": train_config['train_patch_size'],
+                "Valid Patch Size": train_config['valid_patch_size'],
+                "Valid Stride": train_config['valid_stride'],
+
+                "Loss": train_config['kind_loss'],
+                "Optimizer": train_config['kind_optimizer'],
+                "Transform Variant": train_config['train_transform_variant'],
+            }
+            wandb_log.setup(**params)
+            wandb_log.add_watch(trainer.model)
+        else:
+            wandb_log = None
+
         start_time = time.time()
-        threshold = train_config['threshold'] if train_config['threshold'] else 0.5
         patience = 30
 
         for epoch in range(1, train_config['num_epochs']):
@@ -83,8 +110,6 @@ def train(experiment_name: str, resume_training: bool, configuration_path: str, 
 
                 train_loss = 0.
                 train_psnr = 0.
-                visualization = torch.zeros((1, train_config['train_patch_size'], train_config['train_patch_size']),
-                                            device=device)
                 training_images = []
 
                 trainer.model.train()
@@ -97,12 +122,7 @@ def train(experiment_name: str, resume_training: bool, configuration_path: str, 
                     loss = trainer.criterion(predictions, outputs)
                     loss.backward()
                     trainer.optimizer.step()
-
                     train_loss += loss.item()
-
-                    tensor_bin = torch.where(predictions > threshold, 1., 0.)
-                    tensor_diff = torch.abs(tensor_bin - outputs)
-                    visualization += torch.sum(tensor_diff, dim=0)
 
                     with torch.no_grad():
                         psnr = calculate_psnr(predictions, outputs)
@@ -138,11 +158,6 @@ def train(experiment_name: str, resume_training: bool, configuration_path: str, 
                 wandb_logs['train_avg_loss'] = avg_train_loss
                 wandb_logs['train_avg_psnr'] = avg_train_psnr
                 wandb_logs['Random Sample'] = random.choices(training_images, k=5)
-
-                # Make error images
-                rescaled = torch.div(visualization, train_config['train_max_value'])
-                rescaled = torch.clamp(rescaled, min=0., max=1.)
-                wandb_logs['Errors'] = wandb.Image(functional.to_pil_image(rescaled))
 
             # Validation
             trainer.model.eval()
@@ -199,31 +214,5 @@ def train(experiment_name: str, resume_training: bool, configuration_path: str, 
         logger.warning("Training interrupted by user")
     except Exception as e:
         logger.error(f"Training failed due to {e}")
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('-en', '--experiment_name', metavar='<name>', type=str,
-                        help=f"The experiment name which will use on WandB", default="debug")
-    parser.add_argument('-rt', '--resume_training', metavar='<bool>', type=bool,
-                        help=f"Set if you want resume the checkpoint", default=True)
-    parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
-                        help=f"The configuration name will use on WandB", default="configs/training/debug.yaml")
-    parser.add_argument('-net_cfg', '--network_configuration', metavar='<name>', type=str,
-                        help=f"The filename will be used to configure the network", default="configs/network.yaml")
-    parser.add_argument('-wdb', '--use_wandb', metavar='<value>', type=bool,
-                        help=f"If TRUE the training will use WandDB to show logs.", default=not DEBUG)
-    parser.add_argument('-tn', '--train_network', metavar='<value>', type=bool,
-                        help=f"If TRUE the network will be trained also only validate.", default=True)
-
-    args = parser.parse_args()
-    experiment_name = args.experiment_name
-    resume_training = args.resume_training
-    configuration = args.configuration
-    network_configuration = args.network_configuration
-    use_wandb = args.use_wandb
-    train_network = args.train_network
-
-    train(experiment_name, resume_training, configuration, network_configuration, use_wandb, train_network)
-    sys.exit()
+    finally:
+        sys.exit()

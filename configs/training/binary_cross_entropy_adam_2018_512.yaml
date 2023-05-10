@@ -7,25 +7,24 @@ train_transform_variant: "default"
 # Dataset configuration
 train_data_path: "dataset/patches/512/2018/train"
 train_gt_data_path: "dataset/patches/512/2018/train_gt"
-valid_data_path: "dataset/patches/training/original/2018"
-valid_gt_data_path: "dataset/patches/training/ground_truth/2018"
+valid_data_path: "dataset/training/original/2018"
+valid_gt_data_path: "dataset/training/ground_truth/2018"
+path_checkpoint: 'weights/'
+
 
 # Training configuration
 num_epochs: 150
-path_checkpoint: 'weights/'
 learning_rate: 1.5e-4
 seed: 110
 threshold: 0.5
-train_batch_size: 4
+train_batch_size: 2
 train_patch_size: 512
 train_log_every: 100
-train_max_value: 500
 train_kwargs:
   shuffle: True
   pin_memory: True
-  batch_size: 4
+  batch_size: 2
   num_workers: 2
-
 
 
 # Valid configuration

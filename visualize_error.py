@@ -23,13 +23,13 @@ def parser_arguments():
 
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use during running",
-                        default="configs/training/binary_cross_entropy_adam_2018_256.yaml")
+                        default="configs/training/binary_cross_entropy_adam_2018_512.yaml")
     parser.add_argument('-ncfg', '--network_configuration', metavar='<name>', type=str,
                         help=f"The filename will be used to configure the network", default="configs/network.yaml")
     parser.add_argument('-cp', '--checkpoints_path', metavar='<path>', type=str,
-                        help=f"The path of the checkpoints file", default="weights/bce_adam_2018_best_psnr.pth")
+                        help=f"The path of the checkpoints file", default="weights/bce_adam_2017_best_psnr.pth")
     parser.add_argument('-fn', '--filename', metavar='<string>', type=str,
-                        help=f"Filename will be used to store the image result", default='patch_256')
+                        help=f"Filename will be used to store the image result", default='patch_512')
     parser.add_argument('-fr', '--folder_result', metavar='<string>', type=str,
                         help=f"The folder will be used to store the image result", default='results/error_patch')
     parser.add_argument('-mi', '--max_iterations', metavar='<int>', type=int,
@@ -86,7 +86,7 @@ if __name__ == '__main__':
                 size = batch_idx * len(sample)
                 percentage = 100. * size / len(dataset)
 
-                stdout = f"[{size} / {len(dataset)}] ({percentage:.2f}%)"
+                stdout = f"Elaborated: [{size} / {len(dataset)}] ({percentage:.2f}%)"
                 logger.info(stdout)
 
             if max_iterations and batch_idx * len(sample) > max_iterations:
@@ -105,8 +105,6 @@ if __name__ == '__main__':
         plt.show()
     except KeyboardInterrupt:
         logger.warning("Training interrupted by user")
-    except AssertionError as ae:
-        logger.error(f"Training failed due to {ae}")
     except Exception as e:
         logger.error(f"Training failed due to {e}")
     finally:
