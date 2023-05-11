@@ -1,7 +1,7 @@
 # Folder configuration
 path_checkpoint: 'weights/'
 filename_checkpoint: "bce_adam_2018_512_best_psnr.pth"
-folder_destination: "bce_adam_2018"
+folder_destination: "bce_adam_2018_512"
 
 # Dataset configuration
 valid_data_path: "dataset/training/original/2018"

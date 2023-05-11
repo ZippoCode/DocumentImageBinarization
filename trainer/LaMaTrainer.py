@@ -121,12 +121,13 @@ class LaMaTrainingModule:
             valid = sample.squeeze(0).detach()
             pred = pred.squeeze(0).detach()
             gt_valid = gt_valid.squeeze(0).detach()
+
             valid_img = functional.to_pil_image(valid)
             pred_img = functional.to_pil_image(pred)
             gt_valid_img = functional.to_pil_image(gt_valid)
             images[image_name] = [valid_img, pred_img, gt_valid_img]
 
         avg_loss = valid_loss / len(self.valid_data_loader)
-        avg_psnr = valid_psnr / len(self.valid_dataset)
+        avg_psnr = valid_psnr / len(self.valid_data_loader)
 
         return avg_psnr, avg_loss, images

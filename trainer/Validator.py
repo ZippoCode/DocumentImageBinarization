@@ -1,12 +1,12 @@
 import torch
 from ignite.engine import Engine
 from ignite.metrics import PSNR, Precision, Recall
+from torch.utils.data import DataLoader
+from torchvision.transforms import functional
 
-from data.dataloaders import make_valid_dataloader
-from data.datasets import make_valid_dataset
-from modules.FFC import LaMa
-from utils.checkpoints import load_checkpoints
+from data.utils import reconstruct_ground_truth
 from utils.htr_logging import get_logger
+from utils.metrics import Metrics
 
 
 def eval_step(engine, batch, threshold=0.5):
@@ -18,62 +18,65 @@ def eval_step(engine, batch, threshold=0.5):
 
 
 class Validator:
-    def __init__(self, config, network_cfg: dict, device=None):
+    def __init__(self, model: torch.nn.Module, device: torch.device, threshold=.5):
         self._logger = get_logger(Validator.__name__)
-
-        self._count = 0
-        self._device = device
-        self._checkpoints_path = f"{config['path_checkpoint']}{config['filename_checkpoint']}"
-
         self._evaluator = Engine(eval_step)
 
         self._psnr = PSNR(data_range=1.0)
         self._psnr.attach(self._evaluator, 'psnr')
-        self._psnr_value = 0.0
 
         self._precision = Precision()
         self._precision.attach(self._evaluator, 'precision')
-        self._precision_value = 0.0
 
         self._recall = Recall()
         self._recall.attach(self._evaluator, 'recall')
-        self._recall_value = 0.0
 
-        self.valid_dataset = make_valid_dataset(config)
-        self.valid_data_loader = make_valid_dataloader(self.valid_dataset, config)
+        self._model = model
+        self._device = device
+        self._threshold = threshold
+        self._metrics = Metrics()
 
-        self.model = LaMa(input_nc=network_cfg['input_channels'],
-                          output_nc=network_cfg['output_channels'],
-                          init_conv_kwargs=network_cfg['init_conv_kwargs'],
-                          downsample_conv_kwargs=network_cfg['down_sample_conv_kwargs'],
-                          resnet_conv_kwargs=network_cfg['resnet_conv_kwargs'])
-        self.model.eval()
+        if self._model.training:
+            self._model.eval()
+            self._logger.info("Setting model in evaluation state.")
 
-        self.model.to(device=device)
-        load_checkpoints(model=self.model, device=self._device, checkpoints_path=self._checkpoints_path)
+        model.to(device=device)
 
-    def compute(self, predicts: torch.Tensor, targets: torch.Tensor):
-        state = self._evaluator.run([[predicts, targets]])
+    def compute(self, data_loader: DataLoader, output_channels: int, batch_size: int, patch_size: int,
+                stride_size: int):
+        self._logger.info("Start validation ...")
 
-        self._count += len(predicts)
-        self._psnr_value += state.metrics['psnr']
-        self._precision_value += state.metrics['precision']
-        self._recall_value += state.metrics['recall']
+        names = []
+        images = []
 
-        avg_psnr = state.metrics['psnr'] / len(predicts)
-        avg_precision = 100. * state.metrics['precision'] / len(predicts)
-        avg_recall = 100. * state.metrics['recall'] / len(predicts)
+        with torch.no_grad():
+            for index, item in enumerate(data_loader):
+                names.append(item['image_name'][0])
+                num_rows = item['num_rows'].item()
+                samples_patches = item['samples_patches']
+                targets = item['gt_sample']
 
-        return avg_psnr, avg_precision, avg_recall
+                samples_patches = samples_patches.squeeze(0)
+                valid = samples_patches.to(self._device)
+                targets = targets.to(self._device)
 
-    def get_metrics(self):
-        psnr = self._psnr_value / self._count
-        precision = 100. * self._precision_value / self._count
-        recall = 100. * self._recall_value / self._count
-        return psnr, precision, recall
+                valid = valid.squeeze(0).permute(1, 0, 2, 3)
+                predicts = self._model(valid)
+                predicts = reconstruct_ground_truth(predicts, targets, num_rows=num_rows, channels=output_channels,
+                                                    batch=batch_size, patch_size=patch_size, stride=stride_size)
+                predicts = torch.where(predicts > self._threshold, 1., 0.)
 
-    def reset(self):
-        self._count = 0.0
-        self._psnr_value = 0.0
-        self._precision_value = 0.0
-        self._recall_value = 0.0
+                state = self._evaluator.run([[predicts, targets]])
+
+                self._metrics.update_psnr(state.metrics['psnr'])
+                self._metrics.update_precision(state.metrics['precision'])
+                self._metrics.update_recall(state.metrics['recall'])
+
+                predicted_image = functional.to_pil_image(predicts.squeeze(0).detach())
+                images.append(predicted_image)
+
+                self._logger.info(f"Elaborated image number: {index}")
+
+        self._metrics.set_average_metrics(len(data_loader))
+
+        return self._metrics, names, images
