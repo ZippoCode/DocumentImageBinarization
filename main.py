@@ -77,7 +77,7 @@ if __name__ == '__main__':
         bin_image = (prediction > threshold) * 1.0
         bin_image = functional.to_pil_image(bin_image)
         filename = os.path.splitext(os.path.basename(args.image))[0]
-        save_image(bin_image, directory=args.path_destination, filename=f"{filename}_bin.png")
+        save_image(bin_image, directory=args.path_destination, filename=f"{filename}_bin")
         logger.info("End.")
 
         sys.exit()

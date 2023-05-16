@@ -1,0 +1,38 @@
+# Variable configuration for training
+kind_loss: "binary_cross_entropy"
+kind_optimizer: "AdamW"
+train_transform_variant: "default"
+
+
+# Dataset configuration
+train_data_path: "dataset/patches/256/2018/train"
+train_gt_data_path: "dataset/patches/256/2018/train_gt"
+valid_data_path: "dataset/training/original/2018"
+valid_gt_data_path: "dataset/training/ground_truth/2018"
+path_checkpoint: 'weights/'
+
+
+# Training configuration
+num_epochs: 150
+learning_rate: 1.5e-4
+seed: 110
+threshold: 0.5
+train_batch_size: 4
+train_patch_size: 256
+train_log_every: 100
+train_kwargs:
+  shuffle: True
+  pin_memory: True
+  batch_size: 4
+  num_workers: 2
+
+
+# Valid configuration
+valid_batch_size: 1
+valid_patch_size: 256
+valid_stride: 256
+valid_kwargs:
+  shuffle: False
+  pin_memory: True
+  batch_size: 1
+  num_workers: 2

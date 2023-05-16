@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Union
 
 import numpy as np
@@ -30,7 +31,9 @@ def read_yaml(yaml_filename: str):
     return yaml_file
 
 
-def read_image(source_path: str, mode="RGB"):
+def read_image(source_path: Union[str, Path], mode="RGB"):
+    if type(source_path) is Path:
+        assert source_path.exists(), f"Image {source_path} not exists"
     with Image.open(source_path) as img:
         image = img.convert(mode=mode)
         image = np.asarray(image, dtype=np.uint8)

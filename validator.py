@@ -25,7 +25,7 @@ def parser_arguments():
                         help=f"If TRUE will be saved the result images", default=True)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use during running",
-                        default="configs/evaluation/evaluation_2018_256.yaml")
+                        default="configs/evaluation/evaluation_2012.yaml")
     parser.add_argument('-net_cfg', '--network_configuration', metavar='<name>', type=str,
                         help=f"The filename will be used to configure the network", default="configs/network.yaml")
     parser.add_argument('-v', '--view_details', metavar='true or false', type=bool,

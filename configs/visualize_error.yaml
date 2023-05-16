@@ -1,0 +1,15 @@
+# Paths configuration
+data_path: "dataset/patches/256/2018/train"
+gt_data_path: "dataset/patches/256/2018/train_gt"
+checkpoints_path: "weights/bce_adam_2018_256_best_psnr.pth"
+folder_result: "results/error_patch"
+filename: "patch_256"
+max_iterations: 10000
+
+# Configuration
+patch_size: 256
+kwargs:
+  shuffle: False
+  pin_memory: True
+  batch_size: 4
+  num_workers: 2

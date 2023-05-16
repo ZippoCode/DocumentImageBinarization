@@ -36,15 +36,15 @@ class Validator:
         self._threshold = threshold
         self._metrics = Metrics()
 
-        if self._model.training:
-            self._model.eval()
-            self._logger.info("Setting model in evaluation state.")
-
         model.to(device=device)
 
     def compute(self, data_loader: DataLoader, output_channels: int, batch_size: int, patch_size: int,
                 stride_size: int):
         self._logger.info("Start validation ...")
+
+        if self._model.training:
+            self._model.eval()
+            self._logger.info("Setting model in evaluation state.")
 
         names = []
         images = []
