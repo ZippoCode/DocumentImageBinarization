@@ -17,9 +17,7 @@ from utils.ioutils import store_images, read_yaml
 from utils.metrics import calculate_psnr
 
 logger = get_logger(os.path.basename(__file__))
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-logger.info(f"Using {device} device")
 
 
 def random_seed(config: dict):
@@ -61,23 +59,18 @@ if __name__ == '__main__':
         use_wandb = args.use_wandb
         train_network = args.train_network
 
+        if use_wandb and train_network:
+            wandb_log = WandbLog(experiment_name=experiment_name)
+        else:
+            wandb_log = None
+
         logger.info("Start process ...")
+        logger.info(f"Using {device} device")
 
         train_config = read_yaml(configuration_path)
         network_config = read_yaml(network_configuration_path)
 
-        random_seed(train_config)
-
-        trainer = LaMaTrainingModule(train_config, network_config, device=device)
-        if torch.cuda.is_available():
-            trainer.model.cuda()
-
-        if resume_training:
-            trainer.resume_checkpoints(folder=train_config['path_checkpoint'], filename=experiment_name)
-
-        # Configure WandB
-        if use_wandb and train_network:
-            wandb_log = WandbLog(experiment_name=experiment_name)
+        if wandb_log:
             params = {
                 "Architecture": "lama",
 
@@ -95,9 +88,18 @@ if __name__ == '__main__':
                 "Transform Variant": train_config['train_transform_variant'],
             }
             wandb_log.setup(**params)
+
+        random_seed(train_config)
+
+        trainer = LaMaTrainingModule(train_config, network_config, device=device)
+        if torch.cuda.is_available():
+            trainer.model.cuda()
+
+        if resume_training:
+            trainer.resume_checkpoints(folder=train_config['path_checkpoint'], filename=experiment_name)
+
+        if wandb_log:
             wandb_log.add_watch(trainer.model)
-        else:
-            wandb_log = None
 
         start_time = time.time()
         patience = 30
@@ -195,7 +197,7 @@ if __name__ == '__main__':
             wandb_logs['Best Recall'] = trainer.best_recall
 
             stdout = f"Validation Loss: {valid_loss:.4f} - PSNR: {valid_psnr:.4f}"
-            stdout += f" Best Loss: {trainer.best_psnr:.3f}"
+            stdout += f" Best Loss: {trainer.best_psnr:.3f} \t Patience: {patience}"
             logger.info(stdout)
 
             trainer.epoch += 1

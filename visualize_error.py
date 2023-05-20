@@ -60,7 +60,7 @@ if __name__ == '__main__':
         model.eval()
 
         data_path = config['data_path']
-        gt_data_path = config['data_path']
+        gt_data_path = config['gt_data_path']
 
         patch_size = config['patch_size']
         dataloader_config = config['kwargs']
@@ -101,7 +101,7 @@ if __name__ == '__main__':
         error_patch = mean_error_map.cpu().numpy()
         error_patch = np.swapaxes(error_patch, 0, 2)
 
-        plt.imshow(error_patch, cmap='hot', interpolation='nearest')
+        plt.imshow(error_patch, cmap='inferno')
         plt.xlabel('Patch Column')
         plt.ylabel('Patch Row')
         plt.title('Error Distribution in Patches')

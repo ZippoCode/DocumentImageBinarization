@@ -5,10 +5,10 @@ train_transform_variant: "default"
 
 
 # Dataset configuration
-train_data_path: "dataset/patches/256/2014/train"
-train_gt_data_path: "dataset/patches/256/2014/train_gt"
-valid_data_path: "dataset/training/original/2014"
-valid_gt_data_path: "dataset/training/ground_truth/2014"
+train_data_path: "dataset/patches/256/2009/train"
+train_gt_data_path: "dataset/patches/256/2009/train_gt"
+valid_data_path: "dataset/training/original/2009"
+valid_gt_data_path: "dataset/training/ground_truth/2009"
 
 # Training configuration
 num_epochs: 150
