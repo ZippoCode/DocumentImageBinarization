@@ -45,6 +45,9 @@ def parser_arguments():
                         help=f"If TRUE the training will use WandDB to show logs.", default=not DEBUG)
     parser.add_argument('-tn', '--train_network', metavar='<value>', type=bool,
                         help=f"If TRUE the network will be trained also only validate.", default=True)
+    parser.add_argument('-pt', '--patience_time', metavar='<value>', type=int,
+                        help=f"The number of epochs after which the PSNR value must be updated before stopping",
+                        default=30)
 
     return parser.parse_args()
 
@@ -58,6 +61,7 @@ if __name__ == '__main__':
         network_configuration_path = args.network_configuration
         use_wandb = args.use_wandb
         train_network = args.train_network
+        patience = args.patience_time
 
         if use_wandb and train_network:
             wandb_log = WandbLog(experiment_name=experiment_name)
@@ -102,7 +106,6 @@ if __name__ == '__main__':
             wandb_log.add_watch(trainer.model)
 
         start_time = time.time()
-        patience = 30
 
         for epoch in range(1, train_config['num_epochs']):
             wandb_logs = dict()
@@ -177,7 +180,7 @@ if __name__ == '__main__':
                                          wandb.Image(gt_valid_img, caption=f"Ground Truth Sample: {name_image}")]
 
                 if valid_psnr > trainer.best_psnr:
-                    patience = 30
+                    patience = args.patience_time
                     trainer.best_psnr = valid_psnr
 
                     trainer.save_checkpoints(root_folder=train_config['path_checkpoint'],
@@ -193,11 +196,9 @@ if __name__ == '__main__':
 
             # Log best values
             wandb_logs['Best PSNR'] = trainer.best_psnr
-            wandb_logs['Best Precision'] = trainer.best_precision
-            wandb_logs['Best Recall'] = trainer.best_recall
 
             stdout = f"Validation Loss: {valid_loss:.4f} - PSNR: {valid_psnr:.4f}"
-            stdout += f" Best Loss: {trainer.best_psnr:.3f} \t Patience: {patience}"
+            stdout += f" Best Loss: {trainer.best_psnr:.3f} \t Patience: [{patience}/{args.patience_time}]"
             logger.info(stdout)
 
             trainer.epoch += 1

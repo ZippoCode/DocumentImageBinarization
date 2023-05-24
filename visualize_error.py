@@ -1,10 +1,10 @@
 import argparse
-import matplotlib.pyplot as plt
-import numpy as np
 import os
 import sys
-import torch
 
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from torchvision.transforms import transforms
 
 from data.CustomTransforms import RandomCrop, ToTensor
@@ -81,9 +81,10 @@ if __name__ == '__main__':
 
             with torch.no_grad():
                 outputs = model(sample)
+                outputs = torch.where(outputs > 0, 1., 0.)
 
             if error_map is None:
-                error_map = outputs
+                error_map = torch.abs(outputs - gt_sample)
             else:
                 error_map += torch.abs(outputs - gt_sample)
 
@@ -97,8 +98,10 @@ if __name__ == '__main__':
             if max_iterations and batch_idx * len(sample) > max_iterations:
                 break
 
-        mean_error_map = torch.mean(error_map, dim=0)
-        error_patch = mean_error_map.cpu().numpy()
+        error_map = torch.mean(error_map, dim=0)
+        error_patch = error_map.cpu().numpy()
+        min, max = np.min(error_patch), np.max(error_patch)
+        error_patch = (error_patch - min) * (1 / (max - min) * 255)
         error_patch = np.swapaxes(error_patch, 0, 2)
 
         plt.imshow(error_patch, cmap='inferno')
@@ -107,9 +110,7 @@ if __name__ == '__main__':
         plt.title('Error Distribution in Patches')
         plt.show()
 
-        min, max = np.min(error_patch), np.max(error_patch)
-        error_patch_image = (error_patch - min) * (1 / (max - min) * 255)
-        save_image(error_patch_image, directory=folder_result, filename=filename, log=True)
+        save_image(error_patch, directory=folder_result, filename=filename, log=True)
 
     except KeyboardInterrupt:
         logger.warning("Training interrupted by user")

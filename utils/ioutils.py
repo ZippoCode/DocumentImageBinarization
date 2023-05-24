@@ -31,12 +31,20 @@ def read_yaml(yaml_filename: str):
     return yaml_file
 
 
-def read_image(source_path: Union[str, Path], mode="RGB"):
+def read_image(source_path: Union[str, Path], mode="RGB", bg_colour=(255, 255, 255)):
     if type(source_path) is Path:
         assert source_path.exists(), f"Image {source_path} not exists"
+
     with Image.open(source_path) as img:
         image = img.convert(mode=mode)
+
+        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+            alpha = img.convert('RGBA').split()[-1]
+            image = Image.new("RGBA", img.size, bg_colour + (255,))
+            image.paste(img, mask=alpha)
+
         image = np.asarray(image, dtype=np.uint8)
+
     return image
 
 

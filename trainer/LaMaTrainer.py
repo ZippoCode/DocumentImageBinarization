@@ -49,11 +49,8 @@ class LaMaTrainingModule:
                                         network_cfg['optimizer'])
         self.criterion = make_criterion(kind=config['kind_loss']).to(device=device)
 
-        # Validation
         self.best_epoch = 0
-        self.best_psnr = 0.
-        self.best_precision = 0.
-        self.best_recall = 0.
+        self.best_psnr = .0
 
         # Logging
         self.logger = get_logger(LaMaTrainingModule.__name__)
