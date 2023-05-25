@@ -8,11 +8,11 @@ from torchvision.transforms import functional
 from data.dataloaders import make_train_dataloader, make_valid_dataloader
 from data.datasets import make_train_dataset, make_valid_dataset
 from data.utils import reconstruct_ground_truth
-from modules.FFC import LaMa
 from trainer.Losses import make_criterion
 from trainer.Optimizers import make_optimizer
 from utils.htr_logging import get_logger
 from utils.metrics import calculate_psnr
+from utils.network_utils import configure_network
 
 
 class LaMaTrainingModule:
@@ -34,11 +34,7 @@ class LaMaTrainingModule:
         self._patch_size = config['valid_patch_size']
         self._stride = config['valid_stride']
 
-        self.model = LaMa(input_nc=self._input_channels,
-                          output_nc=self._output_channels,
-                          init_conv_kwargs=network_cfg['init_conv_kwargs'],
-                          downsample_conv_kwargs=network_cfg['down_sample_conv_kwargs'],
-                          resnet_conv_kwargs=network_cfg['resnet_conv_kwargs'])
+        self.model = configure_network(network_config=network_cfg)
 
         # Training
         self.epoch = 0

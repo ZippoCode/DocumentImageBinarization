@@ -1,6 +1,7 @@
 # LaMa Configuration
 input_channels: 3
 output_channels: 1
+block_number: 9
 
 init_conv_kwargs:
   ratio_gin: 0

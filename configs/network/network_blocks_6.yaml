@@ -1,0 +1,21 @@
+# LaMa Configuration
+input_channels: 3
+output_channels: 1
+block_number: 6
+
+init_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+down_sample_conv_kwargs:
+  ratio_gin: 0
+  ratio_gout: 0
+resnet_conv_kwargs:
+  ratio_gin: 0.75
+  ratio_gout: 0.75
+
+# Optimizer
+optimizer:
+  betas: [ 0.9, 0.95 ]
+  eps: 1.0e-08
+  weight_decay: 0.05
+  amsgrad: False

@@ -8,10 +8,10 @@ import yaml
 from PIL import Image
 from torchvision.utils import make_grid
 
-from modules.FFC import LaMa
 from utils.checkpoints import load_checkpoints
 from utils.htr_logging import get_logger
 from utils.ioutils import save_image
+from utils.network_utils import configure_network
 
 logger = get_logger('main')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -26,7 +26,8 @@ if __name__ == '__main__':
     parser.add_argument('-im', '--image', metavar='<path>', type=str, help=f"Image will be convert to binary",
                         default="dataset/test/l01.png")
     parser.add_argument('-cn', '--configuration_network', metavar='<name>', type=str,
-                        help=f"The configuration of the network", default="configs/network.yaml")
+                        help=f"The configuration of the network",
+                        default="configs/network/network_blocks_9.yaml")
     parser.add_argument('-pc', '--path_checkpoints', metavar='<name>', type=str,
                         help=f"The path of the checkpoints file", default="weights/bce_adam_2018_best_psnr.pth")
     parser.add_argument('-dst', '--path_destination', metavar='<path>', type=str,
@@ -43,10 +44,7 @@ if __name__ == '__main__':
         network_config = yaml.load(file, Loader=yaml.Loader)
         file.close()
 
-    model = LaMa(input_nc=network_config['input_channels'], output_nc=network_config['output_channels'],
-                 init_conv_kwargs=network_config['init_conv_kwargs'],
-                 downsample_conv_kwargs=network_config['down_sample_conv_kwargs'],
-                 resnet_conv_kwargs=network_config['resnet_conv_kwargs'])
+    model = configure_network(network_config=network_config)
     model.to(device=device)
     load_checkpoints(model=model, device=device, checkpoints_path=args.path_checkpoints)
 

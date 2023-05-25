@@ -40,7 +40,8 @@ def parser_arguments():
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use on WandB", default="configs/training/debug.yaml")
     parser.add_argument('-net_cfg', '--network_configuration', metavar='<name>', type=str,
-                        help=f"The filename will be used to configure the network", default="configs/network.yaml")
+                        help=f"The filename will be used to configure the network",
+                        default="configs/network/network_blocks_9.yaml")
     parser.add_argument('-wdb', '--use_wandb', metavar='<value>', type=bool,
                         help=f"If TRUE the training will use WandDB to show logs.", default=not DEBUG)
     parser.add_argument('-tn', '--train_network', metavar='<value>', type=bool,

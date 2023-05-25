@@ -6,11 +6,11 @@ import torch.utils.data
 
 from data.dataloaders import make_valid_dataloader
 from data.datasets import make_valid_dataset
-from modules.FFC import LaMa
 from trainer.Validator import Validator
 from utils.checkpoints import load_checkpoints
 from utils.htr_logging import get_logger
 from utils.ioutils import read_yaml, store_images
+from utils.network_utils import configure_network
 
 logger = get_logger(os.path.basename(__file__))
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -27,7 +27,8 @@ def parser_arguments():
                         help=f"The configuration name will use during running",
                         default="configs/evaluation/evaluation_2012.yaml")
     parser.add_argument('-net_cfg', '--network_configuration', metavar='<name>', type=str,
-                        help=f"The filename will be used to configure the network", default="configs/network.yaml")
+                        help=f"The filename will be used to configure the network",
+                        default="configs/network/network_blocks_9.yaml")
     parser.add_argument('-v', '--view_details', metavar='true or false', type=bool,
                         help=f"If TRUE the run will show the errors of predictions", default=False)
 
@@ -48,11 +49,7 @@ if __name__ == '__main__':
         patch_size = valid_config['valid_patch_size']
         stride = valid_config['valid_stride']
 
-        model = LaMa(input_nc=network_cfg['input_channels'],
-                     output_nc=network_cfg['output_channels'],
-                     init_conv_kwargs=network_cfg['init_conv_kwargs'],
-                     downsample_conv_kwargs=network_cfg['down_sample_conv_kwargs'],
-                     resnet_conv_kwargs=network_cfg['resnet_conv_kwargs'])
+        model = configure_network(network_config=network_cfg)
 
         folder = valid_config["path_checkpoint"]
         filename = valid_config["filename_checkpoint"]
