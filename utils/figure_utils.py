@@ -73,24 +73,24 @@ def fourier_transform(image_path: Path, folder: str):
     logger.info("Start Fourier Transform process")
     image = read_image(image_path, mode="L")
 
-    f = np.fft.fft2(image)
-    fshift = np.fft.fftshift(f)
-    magnitude_spectrum_original = 20 * np.log(np.abs(fshift))
+    frequencies = np.fft.fft2(image)
+    shifted_frequencies = np.fft.fftshift(frequencies)
+    magnitude_spectrum_original = 20 * np.log(np.abs(shifted_frequencies))
 
     height, width = image.shape[:2]
     center = (width / 2, height / 2)
     rotate_matrix = cv2.getRotationMatrix2D(center=center, angle=45, scale=1)
     rotated_image = cv2.warpAffine(src=image, M=rotate_matrix, dsize=(width, height), borderMode=cv2.BORDER_CONSTANT,
                                    borderValue=255)
-    f = np.fft.fft2(rotated_image)
-    fshift = np.fft.fftshift(f)
-    magnitude_spectrum_rotate = 20 * np.log(np.abs(fshift))
+    frequencies = np.fft.fft2(rotated_image)
+    shifted_frequencies = np.fft.fftshift(frequencies)
+    magnitude_spectrum_rotate = 20 * np.log(np.abs(shifted_frequencies))
 
     save_image(image=image, directory=folder, filename="original", log=True)
     save_image(image=rotated_image, directory=folder, filename="rotate_image", log=True)
 
-    magnitude_spectrum_original = np.asarray(magnitude_spectrum_original, dtype=np.uint8)
-    magnitude_spectrum_rotate = np.asarray(magnitude_spectrum_rotate, dtype=np.uint8)
+    magnitude_spectrum_original = np.asarray(np.log(1 + magnitude_spectrum_original) * 255.0, dtype=np.uint8)
+    magnitude_spectrum_rotate = np.asarray(np.log(1 + magnitude_spectrum_rotate) * 255.0, dtype=np.uint8)
     save_image(image=magnitude_spectrum_original, directory=folder, filename="ft_original", log=True)
     save_image(image=magnitude_spectrum_rotate, directory=folder, filename="ft_rotate", log=True)
 

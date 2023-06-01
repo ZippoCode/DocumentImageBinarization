@@ -1,6 +1,6 @@
 # Paths configuration
-data_path: "dataset/patches/256/2018/train"
-gt_data_path: "dataset/patches/256/2018/train_gt"
+data_path: "dataset/training/original/2018/"
+gt_data_path: "dataset/training/ground_truth/2018/"
 checkpoints_path: "weights/bce_adam_2018_256_best_psnr.pth"
 folder_result: "results/error_patch"
 filename: "patch_256"

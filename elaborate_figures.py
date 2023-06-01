@@ -11,11 +11,11 @@ def parser_arguments():
     parser.add_argument('-im1', '--image_one', metavar='<path>', type=str, help=f"Source image one",
                         default="dataset/patches/512/2018/train/487.png")
     parser.add_argument('-im2', '--image_two', metavar='<path>', type=str, help=f"Image will be convert to binary",
-                        default="dataset/patches/512/2018/train/4785.png")
+                        default="dataset/patches/512/2018/train/3478.png")
     parser.add_argument('-gt1', '--ground_truth_one', metavar='<path>', type=str,
                         help=f"Image will be convert to binary", default="dataset/patches/512/2018/train_gt/487.png")
     parser.add_argument('-gt2', '--ground_truth_two', metavar='<path>', type=str,
-                        help=f"Image will be convert to binary", default="dataset/patches/512/2018/train_gt/4785.png")
+                        help=f"Image will be convert to binary", default="dataset/patches/512/2018/train_gt/3478.png")
     parser.add_argument('-fi', '--fourier_image', metavar='<path>', type=str,
                         help=f"Image will be applied the fourier transform",
                         default="dataset/training/ground_truth/2017/17.bmp")
@@ -45,8 +45,8 @@ if __name__ == '__main__':
     fourier_transform(fourier_image_path, folder=folder)
 
     # Enhancement
-    # equalize_image(Path("dataset/training/original/2010/3.png"), folder=folder)
-    # enhance_contrast(Path("dataset/training/original/2017/10.bmp"), folder=folder, alpha=1.5, beta=0)
+    equalize_image(Path("dataset/training/original/2010/3.png"), folder=folder)
+    enhance_contrast(Path("dataset/training/original/2017/10.bmp"), folder=folder, alpha=1.5, beta=0)
 
     # Augmentation
     sample_path = Path(args.augmentation_image)

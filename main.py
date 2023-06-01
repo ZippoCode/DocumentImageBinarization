@@ -24,7 +24,7 @@ threshold = 0.5
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-im', '--image', metavar='<path>', type=str, help=f"Image will be convert to binary",
-                        default="dataset/test/l01.png")
+                        default="dataset/testing/l01.png")
     parser.add_argument('-cn', '--configuration_network', metavar='<name>', type=str,
                         help=f"The configuration of the network",
                         default="configs/network/network_blocks_9.yaml")
@@ -45,6 +45,7 @@ if __name__ == '__main__':
         file.close()
 
     model = configure_network(network_config=network_config)
+    print(model)
     model.to(device=device)
     load_checkpoints(model=model, device=device, checkpoints_path=args.path_checkpoints)
 

@@ -36,7 +36,7 @@ def parser_arguments():
     parser.add_argument('-en', '--experiment_name', metavar='<name>', type=str,
                         help=f"The experiment name which will use on WandB", default="debug")
     parser.add_argument('-rt', '--resume_training', metavar='<bool>', type=bool,
-                        help=f"Set if you want resume the checkpoint", default=False)
+                        help=f"Set if you want resume the checkpoint", default=True)
     parser.add_argument('-cfg', '--configuration', metavar='<name>', type=str,
                         help=f"The configuration name will use on WandB", default="configs/training/debug.yaml")
     parser.add_argument('-net_cfg', '--network_configuration', metavar='<name>', type=str,
@@ -65,7 +65,7 @@ if __name__ == '__main__':
         patience = args.patience_time
 
         if use_wandb and train_network:
-            wandb_log = WandbLog(experiment_name=experiment_name)
+            wandb_log = WandbLog(experiment_name=experiment_name, resume=resume_training)
         else:
             wandb_log = None
 

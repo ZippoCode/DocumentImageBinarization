@@ -35,24 +35,27 @@ class PatchImage:
         logger.info("Start process ...")
         all_datasets = os.listdir(self.source_original)
         all_datasets.sort()
+
         pbar = tqdm(all_datasets)
 
         try:
             for d_set in pbar:
-                for im in os.listdir(self.source_original + d_set):
+                folded_images = os.listdir(os.path.join(self.source_original, d_set))
+                folded_images.sort()
+                for im in folded_images:
                     pbar.set_description(f"Processing {im} of {d_set}")
                     or_img = read_image(self.source_original + d_set + '/' + im)
                     gt_img = read_image(self.source_ground_truth + d_set + '/' + im)
 
                     if d_set not in [self.validation_year]:
-                        self._split_train_images(or_img, gt_img)
+                        self._split_images(or_img, gt_img)
                     else:
                         pbar.set_description(f"Excluded {im} of {d_set}")
             logger.info(f"Stored {self.number_image} training patches")
         except KeyboardInterrupt:
             logger.error("Keyboard Interrupt: stop running!")
 
-    def _split_train_images(self, or_img: np.ndarray, gt_img: np.ndarray):
+    def _split_images(self, or_img: np.ndarray, gt_img: np.ndarray):
         height = or_img.shape[0]
         width = or_img.shape[1]
         for i in range(0, height, self.overlap_size):
