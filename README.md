@@ -31,3 +31,9 @@ cd DocumentImageBinarization
 pip install -r requirements.txt
 ```
 
+### Download pre-trained models
+Start by downloading pre-trained models from this [link](https://drive.google.com/file/d/1zj_QGlWJlS0KWvwH5qhl4c_fF1PLBmsO/view?usp=drive_link), and then run:
+```
+unzip lama_checkpoints.zip
+```
+
