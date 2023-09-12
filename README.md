@@ -10,14 +10,14 @@ the readability and analysis of digitized documents through image binarization.
 ## Results
 Image 1
 <p float="left" align="center">
-  <img src="https://github.com/ZippoCode/DocumentImageBinarization/blob/main/images/1.png" alt="drawing" width="50%"/> 
-  <img src="https://github.com/ZippoCode/DocumentImageBinarization/blob/main/images/1_bin.png" alt="drawing" width="50%"/>
+  <img src="https://github.com/ZippoCode/DocumentImageBinarization/blob/main/images/1.png" alt="drawing" width="40%"/> 
+  <img src="https://github.com/ZippoCode/DocumentImageBinarization/blob/main/images/1_bin.png" alt="drawing" width="40%"/>
 </p>
 
 Image 2
 <p float="left" align="center">
-  <img src="https://github.com/ZippoCode/DocumentImageBinarization/blob/main/images/9.png" alt="drawing" width="50%"/> 
-  <img src="https://github.com/ZippoCode/DocumentImageBinarization/blob/main/images/9_bin.png" alt="drawing" width="50%"/>
+  <img src="https://github.com/ZippoCode/DocumentImageBinarization/blob/main/images/9.png" alt="drawing" width="40%"/> 
+  <img src="https://github.com/ZippoCode/DocumentImageBinarization/blob/main/images/9_bin.png" alt="drawing" width="40%"/>
 </p>
 
 ## Environment setup
