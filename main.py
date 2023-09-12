@@ -18,8 +18,8 @@ logger = get_logger('main')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 logger.info(f"Using {device} device")
 
-patch_size = 256
-stride = 256
+patch_size = 512
+stride = 512
 threshold = 0.5
 
 if __name__ == '__main__':
@@ -66,10 +66,10 @@ if __name__ == '__main__':
         num_rows = patches.shape[3]
         patches = patches.reshape(batch, channels, -1, patch_size, patch_size)
         patches = patches.squeeze(0).permute(1, 0, 2, 3)
-        logger.info("Created patches ...")
+        logger.info("Created patches")
 
         prediction = model(patches)
-        logger.info("Predicted image ...")
+        logger.info("Predicted image")
 
         # Reconstruct patches
         prediction = make_grid(prediction, nrow=num_rows, padding=0, value_range=(0, 1))
@@ -81,7 +81,7 @@ if __name__ == '__main__':
         bin_image = functional.to_pil_image(bin_image)
         filename = os.path.splitext(os.path.basename(args.image))[0]
         save_image(bin_image, directory=args.path_destination, filename=f"{filename}_bin")
-        logger.info(f"Image saved.")
-        logger.info("End.")
+        logger.info(f"Image saved")
+        logger.info("End")
 
         sys.exit()
