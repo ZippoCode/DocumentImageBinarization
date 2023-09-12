@@ -5,6 +5,7 @@
 /runs/
 /.idea/
 /__pycache__/
+remote_interpreter
 *.pyc
 *.pth
 *.sh
