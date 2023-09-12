@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 
 import torch
 import torchvision.transforms.functional as functional
@@ -24,19 +25,23 @@ threshold = 0.5
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-im', '--image', metavar='<path>', type=str, help=f"Image will be convert to binary",
-                        default="dataset/testing/l01.png")
+                        default="<path>")
     parser.add_argument('-cn', '--configuration_network', metavar='<name>', type=str,
                         help=f"The configuration of the network",
                         default="configs/network/network_blocks_9.yaml")
     parser.add_argument('-pc', '--path_checkpoints', metavar='<name>', type=str,
-                        help=f"The path of the checkpoints file", default="weights/bce_adam_2018_best_psnr.pth")
+                        help=f"The path of the checkpoints file", default="lama_checkpoints.pth")
     parser.add_argument('-dst', '--path_destination', metavar='<path>', type=str,
                         help=f"Destination folder path with contains the result. Default: \"results\"",
-                        default="results/testing")
+                        default="results/")
 
     args = parser.parse_args()
 
-    image_path = args.image
+    image_path = Path(args.image)
+    if not image_path.is_file():
+        logger.error(f"Image {image_path} not found!")
+        sys.exit(-1)
+
     sample = Image.open(image_path).convert("RGB")
     height, width = sample.height, sample.width
 
@@ -45,7 +50,6 @@ if __name__ == '__main__':
         file.close()
 
     model = configure_network(network_config=network_config)
-    print(model)
     model.to(device=device)
     load_checkpoints(model=model, device=device, checkpoints_path=args.path_checkpoints)
 
@@ -77,6 +81,7 @@ if __name__ == '__main__':
         bin_image = functional.to_pil_image(bin_image)
         filename = os.path.splitext(os.path.basename(args.image))[0]
         save_image(bin_image, directory=args.path_destination, filename=f"{filename}_bin")
+        logger.info(f"Image saved.")
         logger.info("End.")
 
         sys.exit()

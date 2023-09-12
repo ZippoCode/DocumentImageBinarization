@@ -37,3 +37,9 @@ Start by downloading pre-trained models from this [link](https://drive.google.co
 unzip lama_checkpoints.zip
 ```
 
+## Binarization image
+```
+source .venv/binarization/bin/activate
+python3 main.py --image=<path>
+```
+
